@@ -2,11 +2,8 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const cloverService = require('./services/cloverService');
+// Only import files that exist
 const productRoutes = require('./routes/products');
-const inventoryRoutes = require('./routes/inventory');
-const checkoutRoutes = require('./routes/checkout');
-const webhookRoutes = require('./routes/webhooks');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,11 +21,8 @@ app.get('/', (req, res) => {
     });
 });
 
-// API Routes
+// Only use routes that exist
 app.use('/api/products', productRoutes);
-app.use('/api/inventory', inventoryRoutes);
-app.use('/api/checkout', checkoutRoutes);
-app.use('/webhooks', webhookRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
