@@ -1,6 +1,3 @@
-// ==================================================
-// FILE: server.js (Main Server)
-// ==================================================
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
