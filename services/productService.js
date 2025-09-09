@@ -1,5 +1,5 @@
 const db = require('../config/database');
-const cloverService = require('./cloverServices');
+const cloverService = require('./cloverService');
 
 class ProductService {
     // Sync all products from Clover to our database
