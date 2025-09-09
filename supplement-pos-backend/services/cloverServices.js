@@ -1,6 +1,3 @@
-// ==================================================
-// FILE: services/cloverService.js (Clover API Integration)
-// ==================================================
 const axios = require('axios');
 
 class CloverService {
