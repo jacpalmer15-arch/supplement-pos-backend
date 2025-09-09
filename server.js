@@ -3,7 +3,7 @@ const cors = require('cors');
 require('dotenv').config();
 
 // Only import files that exist
-const productRoutes = require('./routes/products');
+const productRoutes = require('./supplement-pos-backend/routes/products.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
