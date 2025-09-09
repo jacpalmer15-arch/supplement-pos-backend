@@ -1,6 +1,3 @@
-// ==================================================
-// FILE: routes/products.js (Product API Endpoints)
-// ==================================================
 const express = require('express');
 const productService = require('../services/productService');
 const router = express.Router();
