@@ -1,6 +1,3 @@
-// ==================================================
-// FILE: services/productService.js (Product Data Management)
-// ==================================================
 const db = require('../config/database');
 const cloverService = require('./cloverService');
 
