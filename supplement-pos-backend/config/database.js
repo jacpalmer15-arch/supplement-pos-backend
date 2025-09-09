@@ -1,6 +1,3 @@
-// ==================================================
-// FILE: config/database.js (Database Connection)
-// ==================================================
 const { Pool } = require('pg');
 
 const pool = new Pool({
