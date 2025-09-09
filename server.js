@@ -5,7 +5,6 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const cloverService = require('./services/cloverServices');
 const productRoutes = require('./routes/products');
 const inventoryRoutes = require('./routes/inventory');
 const checkoutRoutes = require('./routes/checkout');
