@@ -1,25 +1,30 @@
 // services/productService.js
 const db = require('../config/database');
-const { getConfig, fetchCloverPage } = require('./cloverService');
+const {
+  CLOVER_MERCHANT_ID,
+  fetchCloverPage
+} = require('./cloverService');
 
 class ProductService {
   /**
-   * Pulls Clover items in pages and upserts into products/skus/inventory.
-   * - No side effects at import time.
-   * - Per-page transactions.
-   * - Defaults to a small page budget to avoid serverless timeouts.
+   * Pull Clover items in pages and upsert into products/skus/inventory.
+   * - Uses .env directly (merchant, token, base URL via cloverService)
+   * - Per-page transactions to keep deploy/runtime stable
+   * - Returns nextOffset so callers can continue where they left off
    */
-  async syncAllProducts({ limit = 100, maxPages = 5 } = {}) {
+  async syncAllProducts({ limit = 100, startOffset = 0, maxPages = 5 } = {}) {
+    if (!CLOVER_MERCHANT_ID) {
+      throw new Error('CLOVER_MERCHANT_ID not set');
+    }
+
     const client = await db.connect();
+    let offset = startOffset;
     let pagesProcessed = 0, totalProcessed = 0, inserted = 0, updated = 0;
 
     try {
-      const { merchantId } = getConfig(); // throws here only if misconfigured
-      let offset = 0;
-
       while (pagesProcessed < maxPages) {
         const { items, nextOffset } = await fetchCloverPage(
-          `/v3/merchants/${merchantId}/items`,
+          `/v3/merchants/${CLOVER_MERCHANT_ID}/items`,
           { limit, offset }
         );
         if (!items.length) break;
@@ -27,11 +32,11 @@ class ProductService {
         await client.query('BEGIN');
 
         for (const it of items) {
-          const cloverId  = it.id;
-          const name      = (it.name || '').trim();
-          const priceCents= Number.isFinite(it.price) ? it.price : null; // Clover price is cents
-          const skuCode   = (it.code || '').trim(); // Clover "code" often ~= SKU
-          const active    = it.hidden ? false : true;
+          const cloverId   = it.id;
+          const name       = (it.name || '').trim();
+          const priceCents = Number.isFinite(it.price) ? it.price : null; // Clover price is cents
+          const skuCode    = (it.code || '').trim(); // often used as SKU
+          const active     = it.hidden ? false : true;
 
           // Upsert product (conflict on external_id)
           const prod = await client.query(
@@ -66,7 +71,7 @@ class ProductService {
             [productId, skuCode, priceCents, active, cloverId]
           );
 
-          // Ensure exactly one inventory row per SKU
+          // Ensure a single inventory row per SKU
           await client.query(
             `
             INSERT INTO inventory (sku_id, on_hand, reserved, reorder_level)
@@ -84,11 +89,18 @@ class ProductService {
 
         pagesProcessed++;
         totalProcessed += items.length;
-        if (nextOffset == null) break;
+        if (nextOffset == null) { offset = null; break; }
         offset = nextOffset;
       }
 
-      return { ok: true, pagesProcessed, totalProcessed, inserted, updated, more: pagesProcessed === maxPages };
+      return {
+        ok: true,
+        pagesProcessed,
+        totalProcessed,
+        inserted,
+        updated,
+        nextOffset: offset // pass this back; call again with {startOffset: nextOffset}
+      };
     } catch (err) {
       try { await client.query('ROLLBACK'); } catch {}
       throw err;
@@ -97,7 +109,7 @@ class ProductService {
     }
   }
 
-  // unchanged kiosk query
+  // unchanged
   async getProductsForKiosk(search = '', categoryId = null) {
     const client = await db.connect();
     try {
