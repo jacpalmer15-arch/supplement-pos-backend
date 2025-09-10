@@ -8,11 +8,15 @@ const router = express.Router();
 
 // POST /webhooks/inventory - Handle inventory updates from Clover
 router.post('/inventory', async (req, res) => {
-    try {
-        console.log('Received inventory webhook:', req.body);
-        
-        const { appId, merchants } = req.body;
-        
+  try {
+    // If express.raw() was used, req.body is a Buffer. Parse it safely.
+    const payload = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString('utf8')) : req.body;
+
+    console.log('Received inventory webhook:', payload);
+
+    const { appId, merchants } = payload;
+    // ...
+       
         if (!merchants || merchants.length === 0) {
             return res.status(400).json({ error: 'No merchant data in webhook' });
         }
@@ -78,10 +82,13 @@ router.post('/inventory', async (req, res) => {
 
 // POST /webhooks/payments - Handle payment updates from Clover  
 router.post('/payments', async (req, res) => {
-    try {
-        console.log('Received payment webhook:', req.body);
-        
-        const { appId, merchants } = req.body;
+  try {
+    const payload = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString('utf8')) : req.body;
+
+    console.log('Received payment webhook:', payload);
+
+    const { appId, merchants } = payload;
+    // ...
         
         if (!merchants || merchants.length === 0) {
             return res.status(400).json({ error: 'No merchant data in webhook' });
