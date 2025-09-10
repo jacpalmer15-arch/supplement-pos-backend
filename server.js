@@ -48,3 +48,26 @@ app.listen(PORT, () => {
     console.log(`🔗 Environment: ${process.env.NODE_ENV}`);
     console.log(`🏪 Clover Merchant: ${process.env.CLOVER_MERCHANT_ID}`);
 });
+
+// server.js
+const dns = require('dns').promises;
+app.get('/health/dns', async (req, res) => {
+  try {
+    const host = new URL(process.env.DATABASE_URL).hostname.trim();
+    const addrs = await dns.resolve(host);
+    res.json({ host, addrs });
+  } catch (e) {
+    res.status(500).json({ error: e.message, host: process.env.DATABASE_URL });
+  }
+});
+
+app.get('/health/db', async (req, res) => {
+  const db = require('./config/database');
+  try {
+    const r = await db.query('SELECT 1 AS ok');
+    res.json({ db: 'ok', result: r.rows[0] });
+  } catch (e) {
+    res.status(500).json({ db: 'fail', error: e.message });
+  }
+});
+
