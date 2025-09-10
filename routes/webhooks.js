@@ -1,11 +1,8 @@
-// ==================================================
-// FILE: routes/webhooks.js
-// ==================================================
+// routes/webhooks.js
 const express = require('express');
 const db = require('../config/database');
 const router = express.Router();
 
-// Helper: parse raw webhook body if needed
 function getPayload(req) {
   return Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString('utf8')) : req.body;
 }
@@ -14,22 +11,18 @@ function getPayload(req) {
 router.post('/inventory', async (req, res) => {
   try {
     const payload = getPayload(req);
-    console.log('Inventory webhook:', JSON.stringify(payload));
-
     const merchants = Array.isArray(payload?.merchants) ? payload.merchants : [];
     if (merchants.length === 0) return res.json({ success: true, message: 'No merchants in payload' });
 
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-
       for (const merchant of merchants) {
         const items = Array.isArray(merchant.items) ? merchant.items : [];
         for (const item of items) {
           const cloverItemId = item.id;
           const qty = Number(item.stockCount ?? item.quantity ?? 0);
 
-          // Update inventory for ALL SKUs under the product with this Clover item id
           await client.query(
             `
             INSERT INTO inventory (sku_id, on_hand, last_updated, sync_source)
@@ -47,9 +40,8 @@ router.post('/inventory', async (req, res) => {
           );
         }
       }
-
       await client.query('COMMIT');
-      return res.json({ success: true, message: 'Inventory updated' });
+      res.json({ success: true, message: 'Inventory updated' });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
@@ -66,19 +58,15 @@ router.post('/inventory', async (req, res) => {
 router.post('/payments', async (req, res) => {
   try {
     const payload = getPayload(req);
-    console.log('Payment webhook:', JSON.stringify(payload));
-
     const merchants = Array.isArray(payload?.merchants) ? payload.merchants : [];
     if (merchants.length === 0) return res.json({ success: true, message: 'No merchants in payload' });
 
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-
       for (const merchant of merchants) {
         const payments = Array.isArray(merchant.payments) ? merchant.payments : [];
         for (const p of payments) {
-          // Find transaction by clover_payment_id or external_id
           const tx = await client.query(
             `SELECT id FROM transactions WHERE clover_payment_id = $1 OR external_id = $2`,
             [p.id || null, p.externalPaymentId || null]
@@ -87,14 +75,16 @@ router.post('/payments', async (req, res) => {
 
           const status = p.result === 'SUCCESS' ? 'COMPLETED' : 'FAILED';
           await client.query(
-            `UPDATE transactions SET status = $1, completed_at = CASE WHEN $1='COMPLETED' THEN NOW() ELSE completed_at END WHERE id = $2`,
+            `UPDATE transactions
+             SET status = $1,
+                 completed_at = CASE WHEN $1='COMPLETED' THEN NOW() ELSE completed_at END
+             WHERE id = $2`,
             [status, tx.rows[0].id]
           );
         }
       }
-
       await client.query('COMMIT');
-      return res.json({ success: true, message: 'Payment webhook processed' });
+      res.json({ success: true, message: 'Payment webhook processed' });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
