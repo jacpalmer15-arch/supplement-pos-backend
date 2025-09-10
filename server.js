@@ -42,27 +42,36 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Start server
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`🔗 Environment: ${process.env.NODE_ENV}`);
-    console.log(`🏪 Clover Merchant: ${process.env.CLOVER_MERCHANT_ID}`);
+
+// ==================================================
+// Health + Diagnostics (place BEFORE app.listen)
+// ==================================================
+const dns = require('dns').promises;
+
+// Simple ping (confirms new deploy picked up)
+app.get('/health/ping', (req, res) => {
+  res.json({ ok: true, time: new Date().toISOString() });
 });
 
-// server.js
-const dns = require('dns').promises;
+// DNS check: can the server resolve your DB host?
 app.get('/health/dns', async (req, res) => {
   try {
-    const host = new URL(process.env.DATABASE_URL).hostname.trim();
+    const url = process.env.DATABASE_URL;
+    if (!url) return res.status(500).json({ error: 'DATABASE_URL is not set' });
+    const host = new URL(url).hostname.trim();
     const addrs = await dns.resolve(host);
     res.json({ host, addrs });
   } catch (e) {
-    res.status(500).json({ error: e.message, host: process.env.DATABASE_URL });
+    res.status(500).json({
+      error: e.message,
+      database_url_present: !!process.env.DATABASE_URL
+    });
   }
 });
 
+// DB check: can we run SELECT 1?
+const db = require('./config/database');
 app.get('/health/db', async (req, res) => {
-  const db = require('./config/database');
   try {
     const r = await db.query('SELECT 1 AS ok');
     res.json({ db: 'ok', result: r.rows[0] });
@@ -70,4 +79,15 @@ app.get('/health/db', async (req, res) => {
     res.status(500).json({ db: 'fail', error: e.message });
   }
 });
+
+// ==================================================
+// Start server (leave this last)
+// ==================================================
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🔗 Environment: ${process.env.NODE_ENV}`);
+  console.log(`🏪 Clover Merchant: ${process.env.CLOVER_MERCHANT_ID}`);
+});
+
+
 
