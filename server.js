@@ -163,4 +163,11 @@ app.listen(PORT, () => {
     console.log('POST /webhooks/orders - Clover order webhook');
 });
 
+// Start the server only when running locally (not in Vercel serverless)
+if (process.env.VERCEL !== '1' && require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
 module.exports = app;
