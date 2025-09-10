@@ -1,84 +1,61 @@
 // services/cloverService.js
 const axios = require('axios');
 
-class CloverService {
-  constructor() {
-    this.baseURL = process.env.CLOVER_BASE_URL;           // e.g. https://sandbox.dev.clover.com
-    this.merchantId = process.env.CLOVER_MERCHANT_ID;     // e.g. RCTST...
-    this.accessToken = process.env.CLOVER_ACCESS_TOKEN;   // <-- NEW: real merchant access token
+const CLOVER_BASE = 'https://api.clover.com';
 
-    if (!this.baseURL || !this.merchantId || !this.accessToken) {
-      throw new Error('Clover config missing: CLOVER_BASE_URL, CLOVER_MERCHANT_ID, or CLOVER_ACCESS_TOKEN');
-    }
+function getConfig() {
+  const merchantId = (process.env.CLOVER_MERCHANT_ID || '').trim();
+  const token = (process.env.CLOVER_ACCESS_TOKEN || '').trim();
+  if (!merchantId || !token) {
+    // Throw only when a caller actually uses Clover (no import-time crash)
+    throw new Error('Clover config missing: set CLOVER_MERCHANT_ID and CLOVER_ACCESS_TOKEN');
   }
+  return { merchantId, token };
+}
 
-  getAuthHeaders() {
-    return {
-      Authorization: `Bearer ${this.accessToken}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json'
-    };
-  }
+function cloverClient(token) {
+  return axios.create({
+    baseURL: CLOVER_BASE,
+    headers: { Authorization: `Bearer ${token}` },
+    timeout: 20000,
+    validateStatus: s => s < 500
+  });
+}
 
-  async getItems() {
-    try {
-      const url = `${this.baseURL}/v3/merchants/${this.merchantId}/items`;
-      const res = await axios.get(url, { headers: this.getAuthHeaders() });
-      return res.data.elements || [];
-    } catch (err) {
-      const data = err.response?.data || err.message;
-      console.error('Error fetching items from Clover:', data);
-      throw new Error(`Failed to fetch items: ${err.response?.status} ${JSON.stringify(data)}`);
+const delay = ms => new Promise(r => setTimeout(r, ms));
+
+async function requestWithRetry(http, path, params, { tries = 4, baseMs = 300 } = {}) {
+  let attempt = 0;
+  for (;;) {
+    const res = await http.get(path, { params });
+    if (res.status === 408 || res.status === 429 || res.status >= 500) {
+      attempt++;
+      if (attempt >= tries) {
+        throw new Error(`Clover ${res.status} after ${tries} tries on ${path}: ${JSON.stringify(res.data)}`);
+      }
+      await delay(baseMs * Math.pow(2, attempt - 1));
+      continue;
     }
-  }
-
-  async getItemVariants(itemId) {
-    try {
-      const url = `${this.baseURL}/v3/merchants/${this.merchantId}/items/${itemId}?expand=variants`;
-      const res = await axios.get(url, { headers: this.getAuthHeaders() });
-      return res.data.variants?.elements || [];
-    } catch (err) {
-      console.error(`Error fetching variants for item ${itemId}:`, err.response?.data || err.message);
-      return [];
+    if (res.status >= 400) {
+      throw new Error(`Clover ${res.status} on ${path}: ${JSON.stringify(res.data)}`);
     }
-  }
-
-  async getInventory() {
-    try {
-      const url = `${this.baseURL}/v3/merchants/${this.merchantId}/item_stocks`;
-      const res = await axios.get(url, { headers: this.getAuthHeaders() });
-      return res.data.elements || [];
-    } catch (err) {
-      const data = err.response?.data || err.message;
-      console.error('Error fetching inventory from Clover:', data);
-      throw new Error(`Failed to fetch inventory: ${err.response?.status} ${JSON.stringify(data)}`);
-    }
-  }
-
-  async createOrder(orderData) {
-    try {
-      const url = `${this.baseURL}/v3/merchants/${this.merchantId}/orders`;
-      const res = await axios.post(url, orderData, { headers: this.getAuthHeaders() });
-      return res.data;
-    } catch (err) {
-      const data = err.response?.data || err.message;
-      console.error('Error creating order in Clover:', data);
-      throw new Error(`Failed to create order: ${err.response?.status} ${JSON.stringify(data)}`);
-    }
-  }
-
-  async initiatePayment(orderId, amount, externalId) {
-    try {
-      const url = `${this.baseURL}/v3/merchants/${this.merchantId}/pay/sale`;
-      const payload = { orderId, amount, externalId, tipAmount: 0, taxAmount: 0 };
-      const res = await axios.post(url, payload, { headers: this.getAuthHeaders() });
-      return res.data;
-    } catch (err) {
-      const data = err.response?.data || err.message;
-      console.error('Error initiating payment:', data);
-      throw new Error(`Failed to initiate payment: ${err.response?.status} ${JSON.stringify(data)}`);
-    }
+    return res.data;
   }
 }
 
-module.exports = new CloverService();
+/** Fetch one page; returns { items, nextOffset } */
+async function fetchCloverPage(path, { params = {}, limit = 100, offset = 0 } = {}) {
+  const { token } = getConfig();
+  const http = cloverClient(token);
+  const data = await requestWithRetry(http, path, { ...params, limit, offset });
+
+  const items = Array.isArray(data?.elements) ? data.elements
+              : Array.isArray(data?.items)    ? data.items
+              : Array.isArray(data)           ? data
+              : [];
+
+  const nextOffset = items.length < limit ? null : offset + items.length;
+  return { items, nextOffset };
+}
+
+module.exports = { getConfig, fetchCloverPage };
