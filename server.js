@@ -1,6 +1,4 @@
-// ==================================================
-// FILE: server.js (Main Server for Vercel + Local)
-// ==================================================
+// server.js
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -25,25 +23,19 @@ app.use('/api/webhooks', express.raw({ type: 'application/json', limit: '1mb' })
 // JSON for everything else
 app.use(express.json({ limit: '1mb' }));
 
-// --- Friendly root (optional) ---
+// Optional landing route
 app.get('/', (req, res) => {
-  res.json({
-    ok: true,
-    service: 'Supplement POS API',
-    env: process.env.NODE_ENV || 'development'
-  });
+  res.json({ ok: true, service: 'Supplement POS API', env: process.env.NODE_ENV || 'development' });
 });
 
-// --- API Routes (mount under /api/...) ---
+// --- API Routes ---
 app.use('/api/products', productRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/checkout', checkoutRoutes);
 app.use('/api/webhooks', webhookRoutes); // Clover should call /api/webhooks/*
 
-// --- Health & Diagnostics (under /api/health/*) ---
-app.get('/api/health/ping', (req, res) => {
-  res.json({ ok: true, time: new Date().toISOString() });
-});
+// --- Health (for Postman diagnostics) ---
+app.get('/api/health/ping', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 
 app.get('/api/health/dns', async (req, res) => {
   try {
@@ -53,10 +45,7 @@ app.get('/api/health/dns', async (req, res) => {
     const addrs = await dns.resolve(host);
     res.json({ host, addrs });
   } catch (e) {
-    res.status(500).json({
-      error: e.message,
-      database_url_present: !!process.env.DATABASE_URL
-    });
+    res.status(500).json({ error: e.message, database_url_present: !!process.env.DATABASE_URL });
   }
 });
 
@@ -69,31 +58,19 @@ app.get('/api/health/db', async (req, res) => {
   }
 });
 
-// --- Catch-all 404 (keep AFTER all routes) ---
+// Catch-all 404 AFTER routes
 app.use('*', (req, res) => {
-  res.status(404).json({
-    error: 'Route not found',
-    method: req.method,
-    path: req.originalUrl,
-    timestamp: new Date().toISOString()
-  });
+  res.status(404).json({ error: 'Route not found', path: req.originalUrl });
 });
 
-// --- Error handler (keep absolutely LAST) ---
+// Error handler LAST
 app.use((err, req, res, next) => {
   console.error('Global error handler:', err.stack);
-  res.status(err.status || 500).json({
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
-    timestamp: new Date().toISOString()
-  });
+  res.status(err.status || 500).json({ error: 'Internal server error' });
 });
 
-// --- Start server locally only; export app for Vercel ---
+// Only listen locally; on Vercel we export the app
 if (process.env.VERCEL !== '1' && require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
-
 module.exports = app;
