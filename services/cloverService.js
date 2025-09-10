@@ -1,89 +1,65 @@
 // services/cloverService.js
 const axios = require('axios');
 
-// Direct refs to your .env (easy to alter)
 const {
-  CLOVER_APP_ID,        // not needed for token-based calls, kept for future OAuth flows
-  CLOVER_APP_SECRET,    // not needed for token-based calls, kept for future OAuth flows
-  CLOVER_ENVIRONMENT,   // 'sandbox' | 'production'
-  CLOVER_MERCHANT_ID,
+  CLOVER_ENVIRONMENT,
+  CLOVER_BASE_URL,
   CLOVER_ACCESS_TOKEN,
-  CLOVER_BASE_URL       // e.g. https://sandbox.dev.clover.com
+  CLOVER_MERCHANT_ID,
 } = process.env;
 
-// Prefer explicit base URL; fall back by environment
+// Prefer explicit base URL; otherwise infer from environment.
 const BASE_URL =
   (CLOVER_BASE_URL && CLOVER_BASE_URL.trim()) ||
-  (CLOVER_ENVIRONMENT === 'sandbox'
+  (String(CLOVER_ENVIRONMENT).toLowerCase() === 'sandbox'
     ? 'https://sandbox.dev.clover.com'
     : 'https://api.clover.com');
 
-function makeClient() {
-  // Do NOT throw at import time—only when actually called
-  if (!CLOVER_MERCHANT_ID || !CLOVER_ACCESS_TOKEN) {
-    throw new Error('Missing CLOVER_MERCHANT_ID or CLOVER_ACCESS_TOKEN');
+function clover() {
+  if (!CLOVER_ACCESS_TOKEN || !CLOVER_MERCHANT_ID) {
+    throw new Error('Missing CLOVER_ACCESS_TOKEN or CLOVER_MERCHANT_ID');
   }
   return axios.create({
     baseURL: BASE_URL,
-    headers: {
-      Authorization: `Bearer ${CLOVER_ACCESS_TOKEN.trim()}`
-      // NOTE: Clover App ID/Secret are for OAuth, not per-request headers
-      // 'X-Clover-App-Id': CLOVER_APP_ID, // not required
-    },
+    headers: { Authorization: `Bearer ${CLOVER_ACCESS_TOKEN.trim()}` },
     timeout: 20000,
-    validateStatus: s => s < 500
+    validateStatus: s => s < 500, // surface 4xx, retry 5xx upstream if you add retries
   });
 }
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+/**
+ * Page through Clover collections with limit/offset.
+ * onBatch receives each page (array). Stops when a short page is seen.
+ */
+async function fetchPaged(path, { params = {}, limit = 100 } = {}, onBatch) {
+  const http = clover();
+  let offset = 0;
 
-async function getWithRetry(path, params, { tries = 4, baseDelayMs = 300 } = {}) {
-  const http = makeClient();
-  let attempt = 0;
   for (;;) {
-    const res = await http.get(path, { params });
-    // Retry on 408/429/5xx
-    if (res.status === 408 || res.status === 429 || res.status >= 500) {
-      attempt++;
-      if (attempt >= tries) {
-        throw new Error(`Clover ${res.status} after ${tries} tries on ${path}: ${JSON.stringify(res.data)}`);
-      }
-      await sleep(baseDelayMs * Math.pow(2, attempt - 1));
-      continue;
-    }
+    const res = await http.get(path, { params: { ...params, limit, offset } });
     if (res.status >= 400) {
-      throw new Error(`Clover ${res.status} on ${path}: ${JSON.stringify(res.data)}`);
+      throw new Error(`${res.status} ${path}: ${JSON.stringify(res.data)}`);
     }
-    return res.data;
+
+    const data = res.data || {};
+    const page =
+      Array.isArray(data.elements) ? data.elements :
+      Array.isArray(data.items)    ? data.items :
+      Array.isArray(data)          ? data :
+      [];
+
+    if (!page.length) break;
+    // user callback does the DB work
+    // eslint-disable-next-line no-await-in-loop
+    await onBatch(page);
+
+    if (page.length < limit) break;
+    offset += page.length;
   }
 }
 
-/**
- * Fetch one Clover page (offset pagination).
- * Returns { items, nextOffset }.
- */
-async function fetchCloverPage(path, { limit = 100, offset = 0, params = {} } = {}) {
-  const data = await getWithRetry(path, { ...params, limit, offset });
-
-  // Common Clover shapes
-  const items = Array.isArray(data?.elements) ? data.elements
-             : Array.isArray(data?.items)    ? data.items
-             : Array.isArray(data)           ? data
-             : [];
-
-  const nextOffset = items.length < limit ? null : offset + items.length;
-  return { items, nextOffset };
-}
-
 module.exports = {
-  // expose env-driven values in case other modules need them
-  CLOVER_APP_ID,
-  CLOVER_APP_SECRET,
-  CLOVER_ENVIRONMENT,
+  clover,
+  fetchPaged,
   CLOVER_MERCHANT_ID,
-  CLOVER_ACCESS_TOKEN,
-  CLOVER_BASE_URL: BASE_URL,
-
-  makeClient,
-  fetchCloverPage
 };
