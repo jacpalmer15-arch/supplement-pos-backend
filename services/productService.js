@@ -139,34 +139,32 @@ class ProductService {
     }
     
     // Sync inventory levels from Clover
-    async syncInventoryLevels(client) {
-        try {
-            const cloverInventory = await cloverService.getInventory();
-            console.log(`📊 Syncing inventory for ${cloverInventory.length} items`);
-            
-            for (const invItem of cloverInventory) {
-                await client.query(`
-                    INSERT INTO inventory (sku_id, on_hand, last_updated, sync_source)
-                    SELECT s.id, $1, NOW(), 'sync'
-                    FROM skus s 
-                    WHERE s.clover_variant_id = $2
-                    ON CONFLICT (sku_id)
-                    DO UPDATE SET 
-                        on_hand = EXCLUDED.on_hand,
-                        last_updated = EXCLUDED.last_updated,
-                        sync_source = EXCLUDED.sync_source
-                `, [
-                    invItem.quantity || 0,
-                    invItem.item.id
-                ]);
-            }
-            
-            console.log('✅ Inventory sync complete');
-        } catch (error) {
-            console.error('❌ Inventory sync failed:', error);
-            // Don't throw - inventory sync failure shouldn't break product sync
-        }
+// services/productService.js (replace just the inventory update query)
+async syncInventoryLevels(client) {
+  try {
+    const cloverInventory = await cloverService.getInventory();
+    for (const invItem of cloverInventory) {
+      await client.query(
+        `
+        INSERT INTO inventory (sku_id, on_hand, last_updated, sync_source)
+        SELECT s.id, $1, NOW(), 'sync'
+        FROM skus s
+        JOIN products p ON p.id = s.product_id
+        WHERE p.clover_item_id = $2
+        ON CONFLICT (sku_id)
+        DO UPDATE SET
+          on_hand = EXCLUDED.on_hand,
+          last_updated = EXCLUDED.last_updated,
+          sync_source = EXCLUDED.sync_source
+        `,
+        [invItem.quantity ?? 0, invItem.item.id]
+      );
     }
+  } catch (error) {
+    console.error('Inventory sync failed:', error);
+  }
+}
+
     
     // Get products for iPad display
     async getProductsForKiosk(search = '', categoryId = null) {
