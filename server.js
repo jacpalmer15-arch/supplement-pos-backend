@@ -12,6 +12,12 @@ const dns = require('dns').promises;
 const db = require('./config/database');
 
 const app = express();
+
+app.use((req, res, next) => {
+  console.log('REQ', req.method, req.originalUrl);
+  next();
+});
+
 const PORT = process.env.PORT || 3000;
 
 // --- Middleware (order matters) ---
