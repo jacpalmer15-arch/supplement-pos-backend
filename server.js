@@ -16,7 +16,12 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+
+// RAW body for webhooks (must come BEFORE express.json)
+app.use('/api/webhooks', express.raw({ type: 'application/json', limit: '1mb' }));
+
+// JSON for everything else
+app.use(express.json({ limit: '1mb' }));
 
 // Health check
 app.get('/', (req, res) => {
@@ -31,7 +36,7 @@ app.get('/', (req, res) => {
 app.use('/api/products', productRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/checkout', checkoutRoutes);
-app.use('/webhooks', webhookRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -43,18 +48,17 @@ app.use((err, req, res, next) => {
 });
 
 
-// ==================================================
-// Health + Diagnostics (place BEFORE app.listen)
-// ==================================================
+// --- Health + Diagnostics under /api ---
 const dns = require('dns').promises;
+const db = require('./config/database');
 
-// Simple ping (confirms new deploy picked up)
-app.get('/health/ping', (req, res) => {
+// Simple ping
+app.get('/api/health/ping', (req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
 });
 
-// DNS check: can the server resolve your DB host?
-app.get('/health/dns', async (req, res) => {
+// DNS check
+app.get('/api/health/dns', async (req, res) => {
   try {
     const url = process.env.DATABASE_URL;
     if (!url) return res.status(500).json({ error: 'DATABASE_URL is not set' });
@@ -69,9 +73,8 @@ app.get('/health/dns', async (req, res) => {
   }
 });
 
-// DB check: can we run SELECT 1?
-const db = require('./config/database');
-app.get('/health/db', async (req, res) => {
+// DB check
+app.get('/api/health/db', async (req, res) => {
   try {
     const r = await db.query('SELECT 1 AS ok');
     res.json({ db: 'ok', result: r.rows[0] });
