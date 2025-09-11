@@ -1,0 +1,101 @@
+Zeinth POS API — Endpoint Reference
+Generated: 2025-09-11 14:11:20 UTC
+
+Base URL
+--------
+Use your environment-specific base (e.g., local: http://localhost:3000). In Postman collections we use:
+  {base_url} = http://localhost:3000
+
+Auth
+----
+No auth for development endpoints at the moment. Lock down before production.
+
+Conventions
+-----------
+- All responses are JSON.
+- Success payloads:  { "success": true, ... }
+- Error payloads:    { "success": false, "error": "<message>" }
+- Timestamps: ISO-8601
+- Prices: integer cents
+
+Root
+----
+GET /
+  Returns basic service info.
+  Example response: { "ok": true, "service": "Supplement POS API", "env": "development" }
+
+Health
+------
+GET /api/health/ping
+GET /api/health/dns
+GET /api/health/db
+  Simple diagnostics for uptime, DNS, and DB connectivity.
+
+Products
+--------
+GET /api/products
+  Query params:
+    kiosk_only=true|false   (default: false) Filter to kiosk-visible items
+    search=<string>         (name/brand/sku/upc ILIKE match)
+    category=<uuid>         (products.category_id)
+  Notes:
+    - Returns products joined with inventory (left join) and a derived stock_status.
+    - When kiosk_only=true, filters to active & visible_in_kiosk.
+  Example:
+    GET /api/products?kiosk_only=true&search=protein
+
+POST /api/products/sync
+  Triggers full Clover backfill (categories → items → item_stocks).
+  Query params:
+    limit=<int>   (optional; default 100) page size for Clover paging
+  Response: counts of inserted/updated rows.
+
+GET /api/products/search/:query
+  Convenience search (same as GET /api/products with search param).
+
+Inventory
+---------
+GET /api/inventory
+  Returns current inventory view with product fields:
+    product_id, clover_item_id, item_group_id, name, sku, upc, size, flavor,
+    price_cents, on_hand, reserved, reorder_level, last_updated, status
+
+GET /api/inventory/low-stock
+  Returns products where on_hand <= reorder_level.
+
+Webhooks
+--------
+Mounted under: /api/webhooks/*
+  Notes:
+    - The Express app reserves this path for Clover webhooks and uses raw body parsing for signature validation.
+    - See routes/webhooks.js for concrete event paths and behavior (not listed here).
+
+Checkout (scaffolded)
+---------------------
+Mounted under: /api/checkout/*
+  Notes:
+    - The server wires checkout routes, but specific endpoints are not documented here. See routes/checkout.js if present.
+
+Error Shapes
+------------
+404 Not Found:
+  { "error": "Route not found", "path": "<originalUrl>" }
+500 Internal Error:
+  { "success": false, "error": "<message>" }
+
+Examples (curl)
+---------------
+# Health
+curl -s {base_url}/api/health/ping | jq
+
+# Sync products from Clover (default limit 100)
+curl -s -X POST {base_url}/api/products/sync | jq
+
+# Kiosk feed with search
+curl -s "{'{'}base_url{'}'}/api/products?kiosk_only=true&search=creatine" | jq
+
+# Full inventory list
+curl -s {'{'}base_url{'}'}/api/inventory | jq
+
+# Low stock
+curl -s {'{'}base_url{'}'}/api/inventory/low-stock | jq
