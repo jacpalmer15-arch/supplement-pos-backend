@@ -70,6 +70,7 @@ class ProductService {
             const name = (it.name || '').trim();
             const sku  = (it.code || '').trim() || null; // nullable by design
             const priceCents = Number.isFinite(it.price) ? it.price : 0; // Clover price is in cents
+            const costCents = Number.isFinite(it.cost) && it.cost >= 0 ? it.cost : null; // NEW: cost -> cost_cents
             const active = it.hidden ? false : true;
 
             // Choose a primary category (first if present)
@@ -89,10 +90,10 @@ class ProductService {
                 visible_in_kiosk, active
               )
               VALUES ($1, $2, $3, $4,
-                      $5, NULL, NULL, NULL,
-                      $6, NULL, NULL, NULL, NULL,
-                      $7, NULL, DEFAULT,
-                      DEFAULT, $8)
+                  $5, NULL, NULL, NULL,
+                  $6, NULL, NULL, NULL, NULL,
+                  $7, $8, DEFAULT,
+                  DEFAULT, $9)
               ON CONFLICT (merchant_id, clover_item_id) DO UPDATE
                 SET name          = EXCLUDED.name,
                     item_group_id = EXCLUDED.item_group_id,
@@ -100,20 +101,22 @@ class ProductService {
                     -- keep existing non-null SKU if Clover sends null/blank
                     sku           = COALESCE(NULLIF(EXCLUDED.sku, ''), products.sku),
                     price_cents   = EXCLUDED.price_cents,
+                    cost_cents    = COALESCE(EXCLUDED.cost_cents, products.cost_cents),
                     active        = EXCLUDED.active,
                     updated_at    = NOW()
               RETURNING id, (xmax = 0) AS inserted
               `,
-              [
-                merchantId,
-                cloverItemId,
-                itemGroupId,
-                categoryId,
-                name,
-                sku,
-                priceCents,
-                active,
-              ]
+                [
+                  merchantId,    // $1
+                  cloverItemId,  // $2
+                  itemGroupId,   // $3
+                  categoryId,    // $4
+                  name,          // $5
+                  sku,           // $6
+                  priceCents,    // $7
+                  costCents,     // $8
+                  active         // $9
+                ]
             );
 
             if (r.rows[0].inserted) productsInserted++; else productsUpdated++;
