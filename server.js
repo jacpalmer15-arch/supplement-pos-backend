@@ -80,3 +80,17 @@ if (process.env.VERCEL !== '1' && require.main === module) {
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
 module.exports = app;
+
+// OAuth callback route
+app.get("/clover/callback", (req, res) => {
+  const authCode = req.query.code;
+  const merchantId = req.query.merchant_id;
+
+  if (!authCode) {
+    return res.status(400).send("No auth code received");
+  }
+
+  // For now just display the code and merchantId in the browser
+  res.send(`Auth Code: ${authCode}<br>Merchant ID: ${merchantId}`);
+});
+
