@@ -1,6 +1,6 @@
 // tests/products.unit.test.js
 const jwt = require('jsonwebtoken');
-const { authenticateSupabaseJWT } = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 
 // Mock database
 jest.mock('../config/database', () => ({
@@ -33,7 +33,7 @@ describe('Authentication Middleware', () => {
   });
 
   it('should reject requests without authorization header', async () => {
-    await authenticateSupabaseJWT(req, res, next);
+    await authenticateToken(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
@@ -46,7 +46,7 @@ describe('Authentication Middleware', () => {
   it('should reject requests with invalid token format', async () => {
     req.headers.authorization = 'InvalidToken';
 
-    await authenticateSupabaseJWT(req, res, next);
+    await authenticateToken(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
@@ -59,7 +59,7 @@ describe('Authentication Middleware', () => {
   it('should reject requests with invalid JWT', async () => {
     req.headers.authorization = 'Bearer invalid-jwt-token';
 
-    await authenticateSupabaseJWT(req, res, next);
+    await authenticateToken(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
@@ -81,7 +81,7 @@ describe('Authentication Middleware', () => {
 
     req.headers.authorization = `Bearer ${token}`;
 
-    await authenticateSupabaseJWT(req, res, next);
+    await authenticateToken(req, res, next);
 
     expect(req.user).toEqual(
       expect.objectContaining({
@@ -105,7 +105,7 @@ describe('Authentication Middleware', () => {
 
     req.headers.authorization = `Bearer ${expiredToken}`;
 
-    await authenticateSupabaseJWT(req, res, next);
+    await authenticateToken(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
