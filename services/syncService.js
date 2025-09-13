@@ -54,7 +54,7 @@ class SyncService {
    * @returns {Object} - Axios instance configured for Clover API
    */
   createCloverClient(accessToken) {
-    const baseURL = process.env.CLOVER_BASE_URL || 
+    const baseURL = process.env.CLOVER_BASE_URL?.trim() || 
       (process.env.CLOVER_ENVIRONMENT?.toLowerCase() === 'sandbox'
         ? 'https://sandbox.dev.clover.com'
         : 'https://api.clover.com');
