@@ -7,6 +7,7 @@ const productRoutes = require('./routes/products');
 const inventoryRoutes = require('./routes/inventory');
 const checkoutRoutes = require('./routes/checkout');
 const webhookRoutes = require('./routes/webhooks');
+const syncRoutes = require('./routes/sync');
 
 // Import auth middleware
 const { authenticateToken, requireMerchant, requireRole } = require('./src/middleware/auth');
@@ -45,6 +46,7 @@ app.use('/api/webhooks', webhookRoutes); // Clover should call /api/webhooks/*
 // Protected routes (authentication required)
 app.use('/api/inventory', authenticateToken, requireMerchant, inventoryRoutes);
 app.use('/api/checkout', authenticateToken, requireMerchant, checkoutRoutes);
+app.use('/api/sync', syncRoutes); // sync routes handle their own auth
 
 // Demo protected route to test authentication
 app.get('/api/auth/me', authenticateToken, (req, res) => {

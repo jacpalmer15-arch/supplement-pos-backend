@@ -28,11 +28,15 @@ function clover() {
 }
 
 /**
- * Page through Clover collections with limit/offset.
+ * Page through Clover collections with limit/offset using a specific client.
  * onBatch receives each page (array). Stops when a short page is seen.
+ * @param {string} path - API path to fetch
+ * @param {Object} options - Options including params and limit
+ * @param {Function} onBatch - Callback function to process each batch
+ * @param {Object} httpClient - Optional axios client to use (defaults to global clover client)
  */
-async function fetchPaged(path, { params = {}, limit = 100 } = {}, onBatch) {
-  const http = clover();
+async function fetchPaged(path, { params = {}, limit = 100 } = {}, onBatch, httpClient = null) {
+  const http = httpClient || clover();
   let offset = 0;
 
   for (;;) {
