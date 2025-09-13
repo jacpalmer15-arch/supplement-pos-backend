@@ -8,6 +8,9 @@ const inventoryRoutes = require('./routes/inventory');
 const checkoutRoutes = require('./routes/checkout');
 const webhookRoutes = require('./routes/webhooks');
 
+// Import auth middleware
+const { authenticateToken, requireMerchant, requireRole } = require('./src/middleware/auth');
+
 const dns = require('dns').promises;
 const db = require('./config/database');
 
@@ -35,10 +38,33 @@ app.get('/', (req, res) => {
 });
 
 // --- API Routes ---
+// Public routes (no authentication required)
 app.use('/api/products', productRoutes);
-app.use('/api/inventory', inventoryRoutes);
-app.use('/api/checkout', checkoutRoutes);
 app.use('/api/webhooks', webhookRoutes); // Clover should call /api/webhooks/*
+
+// Protected routes (authentication required)
+app.use('/api/inventory', authenticateToken, requireMerchant, inventoryRoutes);
+app.use('/api/checkout', authenticateToken, requireMerchant, checkoutRoutes);
+
+// Demo protected route to test authentication
+app.get('/api/auth/me', authenticateToken, (req, res) => {
+  res.json({
+    success: true,
+    user: req.user,
+    merchant: req.merchant,
+    message: 'Authentication successful'
+  });
+});
+
+// Demo admin-only route
+app.get('/api/auth/admin', authenticateToken, requireMerchant, requireRole(['admin', 'owner']), (req, res) => {
+  res.json({
+    success: true,
+    message: 'Admin access granted',
+    user: req.user,
+    merchant: req.merchant
+  });
+});
 
 // --- Health (for Postman diagnostics) ---
 app.get('/api/health/ping', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
