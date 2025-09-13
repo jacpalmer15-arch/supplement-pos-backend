@@ -1,17 +1,13 @@
 // routes/products.js
 const express = require('express');
 const productService = require('../services/productService');
-const { authenticateSupabaseJWT } = require('../middleware/auth');
 const router = express.Router();
-
-// Apply authentication to all routes
-router.use(authenticateSupabaseJWT);
 
 // GET /api/products - with filters: search, categoryId, visibleInKiosk
 router.get('/', async (req, res) => {
   try {
     const { search, categoryId, visibleInKiosk } = req.query;
-    const merchantId = req.user.merchantId;
+    const merchantId = req.merchant.id;
 
     // Parse boolean parameter
     let visibleInKioskBool = null;
@@ -37,7 +33,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const productId = req.params.id;
-    const merchantId = req.user.merchantId;
+    const merchantId = req.merchant.id;
 
     // Validate UUID format (basic check)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -60,7 +56,7 @@ router.get('/:id', async (req, res) => {
 // POST /api/products - create product
 router.post('/', async (req, res) => {
   try {
-    const merchantId = req.user.merchantId;
+    const merchantId = req.merchant.id;
     const productData = req.body;
 
     // Validate required fields
@@ -100,7 +96,7 @@ router.post('/', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   try {
     const productId = req.params.id;
-    const merchantId = req.user.merchantId;
+    const merchantId = req.merchant.id;
     const updateData = req.body;
 
     // Validate UUID format
@@ -141,7 +137,7 @@ router.patch('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const productId = req.params.id;
-    const merchantId = req.user.merchantId;
+    const merchantId = req.merchant.id;
 
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -184,7 +180,7 @@ router.post('/sync', async (req, res) => {
 router.get('/search/:query', async (req, res) => {
   try {
     const q = (req.params.query || '').trim();
-    const merchantId = req.user.merchantId;
+    const merchantId = req.merchant.id;
     
     const data = await productService.getProductsWithFilters({ 
       search: q, 

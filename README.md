@@ -127,6 +127,79 @@ DELETE /api/products/:id
 
 Note: Deletion will be prevented if the product is referenced by existing orders.
 
+### Inventory API
+
+#### Get All Inventory Items
+```http
+GET /api/inventory
+```
+
+Query Parameters:
+- `lowStockOnly` (boolean): Filter to show only items with low stock
+
+Example:
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:3000/api/inventory?lowStockOnly=true"
+```
+
+Response:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "product_id": "123e4567-e89b-12d3-a456-426614174000",
+      "product_name": "Whey Protein",
+      "sku": "WPP-001",
+      "on_hand": 15,
+      "reserved": 2,
+      "reorder_level": 5,
+      "status": "IN_STOCK",
+      "last_updated": "2024-01-01T12:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+#### Update Inventory Levels
+```http
+PATCH /api/inventory/:productId
+```
+
+Request Body:
+```json
+{
+  "on_hand": 25,
+  "reorder_level": 8
+}
+```
+
+Either `on_hand` or `reorder_level` is required.
+
+Example:
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"on_hand": 25, "reorder_level": 8}' \
+  "http://localhost:3000/api/inventory/123e4567-e89b-12d3-a456-426614174000"
+```
+
+#### Get Low Stock Items
+```http
+GET /api/inventory/low-stock
+```
+
+Returns items where `on_hand <= reorder_level`.
+
+### Stock Status Calculation
+
+- **OUT_OF_STOCK**: `on_hand <= 0`
+- **LOW_STOCK**: `on_hand <= reorder_level` and `on_hand > 0`
+- **IN_STOCK**: `on_hand > reorder_level`
+
 ### Legacy Endpoints (Backward Compatibility)
 
 #### Sync Products from Clover
