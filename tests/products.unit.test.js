@@ -1,6 +1,5 @@
 // tests/products.unit.test.js
 const jwt = require('jsonwebtoken');
-const { authenticateToken } = require('../middleware/auth');
 
 // Mock database
 jest.mock('../config/database', () => ({
@@ -37,8 +36,8 @@ describe('Authentication Middleware', () => {
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
-      success: false,
-      error: 'Authorization header with Bearer token required'
+      error: 'Access token required',
+      message: 'Please provide a valid Authorization header with Bearer token'
     });
     expect(next).not.toHaveBeenCalled();
   });
@@ -50,8 +49,8 @@ describe('Authentication Middleware', () => {
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
-      success: false,
-      error: 'Authorization header with Bearer token required'
+      error: 'Access token required',
+      message: 'Please provide a valid Authorization header with Bearer token'
     });
     expect(next).not.toHaveBeenCalled();
   });
@@ -63,8 +62,8 @@ describe('Authentication Middleware', () => {
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
-      success: false,
-      error: 'Invalid token'
+      error: 'Invalid token',
+      message: 'Token is malformed or invalid'
     });
     expect(next).not.toHaveBeenCalled();
   });
@@ -85,8 +84,12 @@ describe('Authentication Middleware', () => {
 
     expect(req.user).toEqual(
       expect.objectContaining({
-        id: 'user-123',
-        merchantId: 'merchant-456'
+        id: 'user-123'
+      })
+    );
+    expect(req.merchant).toEqual(
+      expect.objectContaining({
+        id: 'merchant-456'
       })
     );
     expect(next).toHaveBeenCalled();
@@ -109,8 +112,8 @@ describe('Authentication Middleware', () => {
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
-      success: false,
-      error: 'Token expired'
+      error: 'Token expired',
+      message: 'Please refresh your authentication token'
     });
     expect(next).not.toHaveBeenCalled();
   });

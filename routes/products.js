@@ -1,7 +1,6 @@
 // routes/products.js
 const express = require('express');
 const productService = require('../services/productService');
-const router = express.Router();
 
 // GET /api/products - with filters: search, categoryId, visibleInKiosk
 router.get('/', async (req, res) => {

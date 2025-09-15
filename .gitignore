@@ -3,9 +3,3 @@
 .env.development.local
 .env.test.local
 .env.production.local
-
-# Dependencies
-node_modules/
-
-# Temporary files  
-tmp/
