@@ -56,6 +56,98 @@ All API routes require JWT authentication. Include the token in the Authorizatio
 Authorization: Bearer <your-jwt-token>
 ```
 
+### Sync API
+
+#### Full Clover Sync
+```http
+POST /api/sync/full
+```
+
+Performs a complete synchronization of categories, products (items), and inventory from Clover POS to the local database for the authenticated merchant.
+
+**Authentication**: Required (Bearer token with merchant context)
+
+**Feature Flag**: Controlled by `ENABLE_CLOVER` environment variable
+
+**Response Format**:
+```json
+{
+  "success": true,
+  "message": "Full sync completed successfully",
+  "enabled": true,
+  "duration": "2340ms",
+  "categories": {
+    "success": true,
+    "processed": 5,
+    "errors": null
+  },
+  "products": {
+    "success": true,
+    "processed": 23,
+    "errors": null
+  },
+  "inventory": {
+    "success": true,
+    "processed": 23,
+    "errors": null
+  },
+  "timestamp": "2024-09-13T12:00:00.000Z"
+}
+```
+
+**Error Responses**:
+- `400` - No Clover access token found for merchant
+- `401` - Clover access token expired
+- `403` - Insufficient permissions or missing merchant context
+- `404` - Merchant account not found
+- `500` - Sync operation failed
+
+**Feature Disabled Response** (when `ENABLE_CLOVER=false`):
+```json
+{
+  "success": true,
+  "message": "Clover sync is currently disabled",
+  "enabled": false,
+  "categories": { "processed": 0 },
+  "products": { "processed": 0 },
+  "inventory": { "processed": 0 }
+}
+```
+
+Example:
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <your-jwt-token>" \
+  -H "Content-Type: application/json" \
+  "http://localhost:3000/api/sync/full"
+```
+
+#### Sync Status
+```http
+GET /api/sync/status
+```
+
+Check the current sync status and token validation for the authenticated merchant.
+
+**Authentication**: Required
+
+**Response Format**:
+```json
+{
+  "success": true,
+  "enabled": true,
+  "merchant_id": "123e4567-e89b-12d3-a456-426614174000",
+  "token_status": "valid",
+  "timestamp": "2024-09-13T12:00:00.000Z"
+}
+```
+
+**Token Status Values**:
+- `valid` - Token exists and is not expired
+- `missing` - No Clover token found for merchant
+- `expired` - Token exists but has expired
+- `error` - Error checking token status
+
 ### Products API
 
 #### Get All Products
@@ -208,7 +300,68 @@ Key variables:
 - `DATABASE_URL`: PostgreSQL connection string
 - `JWT_SECRET`: Secret key for JWT token verification
 - `CLOVER_*`: Clover POS integration settings
+- `ENABLE_CLOVER`: Feature flag to enable/disable Clover sync (default: false)
 - `PORT`: Server port (default: 3000)
+
+### Clover Sync Configuration
+
+The Clover sync functionality is controlled by the `ENABLE_CLOVER` feature flag:
+
+```env
+# Enable Clover sync features
+ENABLE_CLOVER=true
+
+# Clover API configuration
+CLOVER_APP_ID=your_clover_app_id
+CLOVER_APP_SECRET=your_clover_app_secret
+CLOVER_ENVIRONMENT=sandbox
+CLOVER_BASE_URL=https://sandbox.dev.clover.com
+```
+
+**Important**: When `ENABLE_CLOVER=false`, all sync endpoints return stubbed responses without making API calls.
+
+### Database Setup
+
+The application requires these database tables with Clover sync support:
+- `merchants` - Merchant information with clover_merchant_id
+- `clover_tokens` - OAuth tokens for Clover API access
+- `categories` - Product categories with clover_id for sync
+- `products` - Product catalog with clover_id for sync  
+- `inventory` - Inventory levels with Clover sync tracking
+
+Run migrations to set up the schema:
+```bash
+node migrations/run-migrations.js
+```
+
+### Clover Integration Setup
+
+1. **Merchant Setup**: Merchants must be created with valid `clover_merchant_id`
+2. **Token Management**: OAuth tokens stored in `clover_tokens` table per merchant
+3. **Sync Process**: Categories → Products → Inventory (in sequence)
+4. **Idempotency**: All sync operations use upsert logic for safe re-runs
+
+### Troubleshooting Sync Issues
+
+**Token Issues**:
+- `400 No Clover access token found`: Merchant needs to authenticate with Clover OAuth
+- `401 Token expired`: Use refresh token or re-authenticate with Clover
+- `403 Merchant context required`: Ensure JWT token includes merchant_id
+
+**API Issues**:
+- Check `CLOVER_BASE_URL` matches your Clover environment (sandbox/production)
+- Verify `clover_merchant_id` matches the authenticated Clover account
+- Ensure token has sufficient scopes for inventory and catalog access
+
+**Database Issues**:
+- Run migrations to ensure proper table schema with clover_id columns
+- Check for unique constraint violations on SKU/UPC fields
+- Verify merchant_id associations are correct
+
+**Feature Flag Issues**:
+- When `ENABLE_CLOVER=false`, all sync operations return stubbed responses
+- Check environment variable is set correctly (case-sensitive)
+- Restart server after changing feature flag settings
 
 ## Error Codes
 

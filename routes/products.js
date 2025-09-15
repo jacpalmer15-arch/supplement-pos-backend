@@ -1,11 +1,11 @@
 // routes/products.js
 const express = require('express');
 const productService = require('../services/productService');
-const { authenticateSupabaseJWT } = require('../middleware/auth');
+const { authenticateToken } = require('../src/middleware/auth');
 const router = express.Router();
 
 // Apply authentication to all routes
-router.use(authenticateSupabaseJWT);
+router.use(authenticateToken);
 
 // GET /api/products - with filters: search, categoryId, visibleInKiosk
 router.get('/', async (req, res) => {

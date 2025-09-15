@@ -1,6 +1,6 @@
 // tests/products.unit.test.js
 const jwt = require('jsonwebtoken');
-const { authenticateSupabaseJWT } = require('../middleware/auth');
+const { authenticateToken } = require('../src/middleware/auth');
 
 // Mock database
 jest.mock('../config/database', () => ({
@@ -33,12 +33,12 @@ describe('Authentication Middleware', () => {
   });
 
   it('should reject requests without authorization header', async () => {
-    await authenticateSupabaseJWT(req, res, next);
+    await authenticateToken(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
-      success: false,
-      error: 'Authorization header with Bearer token required'
+      error: 'Access token required',
+      message: 'Please provide a valid Authorization header with Bearer token'
     });
     expect(next).not.toHaveBeenCalled();
   });
@@ -46,12 +46,12 @@ describe('Authentication Middleware', () => {
   it('should reject requests with invalid token format', async () => {
     req.headers.authorization = 'InvalidToken';
 
-    await authenticateSupabaseJWT(req, res, next);
+    await authenticateToken(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
-      success: false,
-      error: 'Authorization header with Bearer token required'
+      error: 'Access token required',
+      message: 'Please provide a valid Authorization header with Bearer token'
     });
     expect(next).not.toHaveBeenCalled();
   });
@@ -59,12 +59,12 @@ describe('Authentication Middleware', () => {
   it('should reject requests with invalid JWT', async () => {
     req.headers.authorization = 'Bearer invalid-jwt-token';
 
-    await authenticateSupabaseJWT(req, res, next);
+    await authenticateToken(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
-      success: false,
-      error: 'Invalid token'
+      error: 'Invalid token',
+      message: 'Token is malformed or invalid'
     });
     expect(next).not.toHaveBeenCalled();
   });
@@ -81,12 +81,16 @@ describe('Authentication Middleware', () => {
 
     req.headers.authorization = `Bearer ${token}`;
 
-    await authenticateSupabaseJWT(req, res, next);
+    await authenticateToken(req, res, next);
 
     expect(req.user).toEqual(
       expect.objectContaining({
-        id: 'user-123',
-        merchantId: 'merchant-456'
+        id: 'user-123'
+      })
+    );
+    expect(req.merchant).toEqual(
+      expect.objectContaining({
+        id: 'merchant-456'
       })
     );
     expect(next).toHaveBeenCalled();
@@ -105,12 +109,12 @@ describe('Authentication Middleware', () => {
 
     req.headers.authorization = `Bearer ${expiredToken}`;
 
-    await authenticateSupabaseJWT(req, res, next);
+    await authenticateToken(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
-      success: false,
-      error: 'Token expired'
+      error: 'Token expired',
+      message: 'Please refresh your authentication token'
     });
     expect(next).not.toHaveBeenCalled();
   });
