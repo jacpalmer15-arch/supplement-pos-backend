@@ -39,7 +39,7 @@ describe('Products API', () => {
           merchant_id: testMerchantId,
           exp: Math.floor(Date.now() / 1000) + 3600 // 1 hour
         },
-        process.env.JWT_SECRET
+        process.env.JWT_SECRET || 'test-secret-key'
       );
     } finally {
       client.release();
@@ -351,7 +351,7 @@ describe('Products API', () => {
             merchant_id: otherMerchantId,
             exp: Math.floor(Date.now() / 1000) + 3600
           },
-          process.env.JWT_SECRET
+          process.env.JWT_SECRET || 'test-secret-key'
         );
       } finally {
         client.release();
