@@ -2,11 +2,21 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+const { requireMerchant } = require('./middleware/auth');
 
 const productRoutes = require('./routes/products');
 const inventoryRoutes = require('./routes/inventory');
 const checkoutRoutes = require('./routes/checkout');
 const webhookRoutes = require('./routes/webhooks');
+const syncRoutes = require('./routes/sync');
+
+// Import auth middleware
+function authenticateToken(req, res, next) {
+  if (process.env.NODE_ENV === 'development') {
+    return next(); // Bypass in dev
+  }
+  // ...real auth logic here for production
+}
 
 const dns = require('dns').promises;
 const db = require('./config/database');
@@ -35,10 +45,34 @@ app.get('/', (req, res) => {
 });
 
 // --- API Routes ---
-app.use('/api/products', productRoutes);
-app.use('/api/inventory', inventoryRoutes);
-app.use('/api/checkout', checkoutRoutes);
+// Protected routes (authentication required)
+app.use('/api/products', authenticateToken, requireMerchant, productRoutes);
+app.use('/api/inventory', authenticateToken, requireMerchant, inventoryRoutes);
+app.use('/api/checkout', authenticateToken, requireMerchant, checkoutRoutes);
+app.use('/api/sync', syncRoutes); // sync routes handle their own auth
+
+// Public routes (no authentication required)
 app.use('/api/webhooks', webhookRoutes); // Clover should call /api/webhooks/*
+
+// Demo protected route to test authentication
+app.get('/api/auth/me', authenticateToken, (req, res) => {
+  res.json({
+    success: true,
+    user: req.user,
+    merchant: req.merchant,
+    message: 'Authentication successful'
+  });
+});
+
+// Demo admin-only route
+app.get('/api/auth/admin', authenticateToken, requireMerchant, requireRole(['admin', 'owner']), (req, res) => {
+  res.json({
+    success: true,
+    message: 'Admin access granted',
+    user: req.user,
+    merchant: req.merchant
+  });
+});
 
 // --- Health (for Postman diagnostics) ---
 app.get('/api/health/ping', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));

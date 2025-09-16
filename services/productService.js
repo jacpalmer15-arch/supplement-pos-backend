@@ -244,6 +244,293 @@ class ProductService {
     }
   }
 
+  // --------------- CRUD Operations ---------------
+
+  /**
+   * Get a single product by ID for a specific merchant
+   */
+  async getProductById(productId, merchantId) {
+    const client = await db.connect();
+    try {
+      const sql = `
+        SELECT
+          p.id AS product_id,
+          p.clover_item_id,
+          p.item_group_id,
+          p.category_id,
+          p.name,
+          p.brand,
+          p.description,
+          p.image_url,
+          p.sku,
+          p.upc,
+          p.name_suffix,
+          p.size,
+          p.flavor,
+          p.price_cents,
+          p.cost_cents,
+          p.tax_rate_decimal,
+          p.visible_in_kiosk,
+          p.active,
+          p.created_at,
+          p.updated_at,
+          COALESCE(i.on_hand, 0) AS on_hand,
+          COALESCE(i.reserved, 0) AS reserved,
+          CASE
+            WHEN COALESCE(i.on_hand,0) <= 0 THEN 'OUT_OF_STOCK'
+            WHEN COALESCE(i.on_hand,0) <= COALESCE(i.reorder_level,5) THEN 'LOW_STOCK'
+            ELSE 'IN_STOCK'
+          END AS stock_status
+        FROM products p
+        LEFT JOIN inventory i ON i.product_id = p.id
+        WHERE p.id = $1 AND p.merchant_id = $2
+        LIMIT 1
+      `;
+
+      const { rows } = await client.query(sql, [productId, merchantId]);
+      return rows.length > 0 ? rows[0] : null;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Create a new product
+   */
+  async createProduct(productData, merchantId) {
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+
+      const {
+        name,
+        description = null,
+        price_cents,
+        sku = null,
+        upc = null,
+        category_id = null,
+        visible_in_kiosk = true,
+        brand = null,
+        image_url = null,
+        name_suffix = null,
+        size = null,
+        flavor = null,
+        cost_cents = null,
+        tax_rate_decimal = 0.0875,
+        active = true
+      } = productData;
+
+      const sql = `
+        INSERT INTO products (
+          merchant_id, name, description, price_cents, sku, upc, 
+          category_id, visible_in_kiosk, brand, image_url, 
+          name_suffix, size, flavor, cost_cents, tax_rate_decimal, active
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        RETURNING *
+      `;
+
+      const values = [
+        merchantId, name, description, price_cents, sku, upc,
+        category_id, visible_in_kiosk, brand, image_url,
+        name_suffix, size, flavor, cost_cents, tax_rate_decimal, active
+      ];
+
+      const result = await client.query(sql, values);
+      
+      // Initialize inventory entry for the new product
+      const productId = result.rows[0].id;
+      await client.query(
+        `
+        INSERT INTO inventory (product_id, on_hand, reserved, reorder_level, sync_source)
+        VALUES ($1, 0, 0, 5, 'manual')
+        `,
+        [productId]
+      );
+
+      await client.query('COMMIT');
+      return result.rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Update a product
+   */
+  async updateProduct(productId, productData, merchantId) {
+    const client = await db.connect();
+    try {
+      // Build dynamic update query
+      const updateFields = [];
+      const values = [];
+      let paramCount = 1;
+
+      const allowedFields = [
+        'name', 'description', 'price_cents', 'sku', 'upc', 
+        'category_id', 'visible_in_kiosk', 'brand', 'image_url',
+        'name_suffix', 'size', 'flavor', 'cost_cents', 'tax_rate_decimal', 'active'
+      ];
+
+      for (const field of allowedFields) {
+        if (productData.hasOwnProperty(field)) {
+          updateFields.push(`${field} = $${paramCount}`);
+          values.push(productData[field]);
+          paramCount++;
+        }
+      }
+
+      if (updateFields.length === 0) {
+        throw new Error('No valid fields to update');
+      }
+
+      updateFields.push('updated_at = NOW()');
+      
+      const sql = `
+        UPDATE products 
+        SET ${updateFields.join(', ')}
+        WHERE id = $${paramCount} AND merchant_id = $${paramCount + 1}
+        RETURNING *
+      `;
+
+      values.push(productId, merchantId);
+
+      const result = await client.query(sql, values);
+      if (result.rows.length === 0) {
+        return null; // Product not found or access denied
+      }
+
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Delete a product (with reference checks)
+   */
+  async deleteProduct(productId, merchantId) {
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Check if product exists and belongs to merchant
+      const productCheck = await client.query(
+        'SELECT id FROM products WHERE id = $1 AND merchant_id = $2',
+        [productId, merchantId]
+      );
+
+      if (productCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return { success: false, error: 'Product not found' };
+      }
+
+      // Check for references in orders (this would be implemented based on your schema)
+      // For now, we'll assume a simple check - adjust based on your actual order structure
+      // const orderCheck = await client.query(
+      //   'SELECT id FROM order_items WHERE product_id = $1 LIMIT 1',
+      //   [productId]
+      // );
+      
+      // if (orderCheck.rows.length > 0) {
+      //   await client.query('ROLLBACK');
+      //   return { success: false, error: 'Cannot delete product: referenced by orders' };
+      // }
+
+      // Delete inventory first (foreign key constraint)
+      await client.query('DELETE FROM inventory WHERE product_id = $1', [productId]);
+      
+      // Delete the product
+      const result = await client.query(
+        'DELETE FROM products WHERE id = $1 AND merchant_id = $2 RETURNING *',
+        [productId, merchantId]
+      );
+
+      await client.query('COMMIT');
+      return { success: true, deletedProduct: result.rows[0] };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (error.code === '23503') { // Foreign key violation
+        return { success: false, error: 'Cannot delete product: referenced by other records' };
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Enhanced product listing with filters for the new API
+   */
+  async getProductsWithFilters({ search = '', categoryId = null, visibleInKiosk = null, merchantId } = {}) {
+    const client = await db.connect();
+    try {
+      const params = [merchantId];
+      let where = `p.merchant_id = $1 AND p.active = true`;
+
+      if (search) {
+        params.push(`%${search}%`);
+        const idx = params.length;
+        where += ` AND (
+          p.name ILIKE $${idx} OR p.brand ILIKE $${idx} OR p.sku ILIKE $${idx} OR p.upc ILIKE $${idx}
+        )`;
+      }
+
+      if (categoryId) {
+        params.push(categoryId);
+        where += ` AND p.category_id = $${params.length}`;
+      }
+
+      if (visibleInKiosk !== null) {
+        params.push(visibleInKiosk);
+        where += ` AND p.visible_in_kiosk = $${params.length}`;
+      }
+
+      const sql = `
+        SELECT
+          p.id                AS product_id,
+          p.clover_item_id,
+          p.item_group_id,
+          p.category_id,
+          p.name,
+          p.brand,
+          p.description,
+          p.image_url,
+          p.sku,
+          p.upc,
+          p.name_suffix,
+          p.size,
+          p.flavor,
+          p.price_cents,
+          p.cost_cents,
+          p.tax_rate_decimal,
+          p.visible_in_kiosk,
+          p.active,
+          p.created_at,
+          p.updated_at,
+          COALESCE(i.on_hand, 0) AS on_hand,
+          COALESCE(i.reserved, 0) AS reserved,
+          CASE
+            WHEN COALESCE(i.on_hand,0) <= 0 THEN 'OUT_OF_STOCK'
+            WHEN COALESCE(i.on_hand,0) <= COALESCE(i.reorder_level,5) THEN 'LOW_STOCK'
+            ELSE 'IN_STOCK'
+          END AS stock_status
+        FROM products p
+        LEFT JOIN inventory i ON i.product_id = p.id
+        WHERE ${where}
+        ORDER BY p.name, p.name_suffix NULLS LAST
+      `;
+
+      const { rows } = await client.query(sql, params);
+      return rows;
+    } finally {
+      client.release();
+    }
+  }
+
   // --------------- private helpers ---------------
 
   async #ensureMerchant(client, http, cloverMerchantId) {
