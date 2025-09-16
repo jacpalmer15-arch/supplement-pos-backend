@@ -2,6 +2,7 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+const { requireMerchant } = require('./middleware/auth');
 
 const productRoutes = require('./routes/products');
 const inventoryRoutes = require('./routes/inventory');
