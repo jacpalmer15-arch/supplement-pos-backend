@@ -2,6 +2,11 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+
+// Initialize and validate environment
+const { initializeEnvironment } = require('./utils/environment');
+const { config } = initializeEnvironment();
+
 const { authenticateToken, requireMerchant, requireRole } = require('./middleware/auth');
 
 const productRoutes = require('./routes/products');
@@ -21,7 +26,7 @@ app.use((req, res, next) => {
   next();
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = config.port;
 
 // --- Middleware (order matters) ---
 app.use(cors());
