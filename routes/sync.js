@@ -1,7 +1,7 @@
 // routes/sync.js
 const express = require('express');
 const syncService = require('../services/syncService');
-const { authenticateToken, requireMerchant } = require('../src/middleware/auth');
+const { authenticateToken, requireMerchant } = require('../middleware/auth');
 
 const router = express.Router();
 

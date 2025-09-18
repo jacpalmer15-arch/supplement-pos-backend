@@ -2,22 +2,13 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
-const { requireMerchant } = require('./middleware/auth');
+const { authenticateToken, requireMerchant, requireRole } = require('./middleware/auth');
 
 const productRoutes = require('./routes/products');
 const inventoryRoutes = require('./routes/inventory');
 const checkoutRoutes = require('./routes/checkout');
 const webhookRoutes = require('./routes/webhooks');
 const syncRoutes = require('./routes/sync');
-
-// Import auth middleware
-function authenticateToken(req, res, next) {
-  if (process.env.NODE_ENV === 'development') {
-    return next(); // Bypass in dev
-  }
-  // ...real auth logic here for production
-}
-
 const dns = require('dns').promises;
 const db = require('./config/database');
 

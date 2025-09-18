@@ -1,5 +1,6 @@
 // tests/products.unit.test.js
 const jwt = require('jsonwebtoken');
+const { authenticateToken, requireMerchant, requireRole } = require('../middleware/auth');
 
 // Mock database
 jest.mock('../config/database', () => ({
