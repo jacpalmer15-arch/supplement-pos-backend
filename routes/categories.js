@@ -12,7 +12,7 @@ router.get('/', async (req, res) => {
     try {
       const result = await client.query(`
         SELECT id, name, sort_order, active, created_at, updated_at,
-               clover_id, clover_created_at, clover_modified_at
+               clover_category_id
         FROM categories 
         WHERE merchant_id = $1 
         ORDER BY sort_order ASC, name ASC
