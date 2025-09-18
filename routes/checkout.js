@@ -71,46 +71,53 @@ router.post('/', async (req, res) => {
         
         const totalCents = subtotalCents + taxCents;
         
-        // Create transaction record
-        const transactionResult = await client.query(`
-            INSERT INTO transactions (
+        // Create order record  
+        const orderResult = await client.query(`
+            INSERT INTO orders (
                 merchant_id, external_id, subtotal_cents, 
-                tax_cents, total_cents, status
-            ) VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING id
+                tax_cents, total_cents, status, device_serial, source
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING id, order_number
         `, [
             merchantId,
             externalId,
             subtotalCents,
             taxCents,
             totalCents,
-            'PENDING'
+            'pending',
+            deviceSerial || null,
+            'pos'
         ]);
         
-        const transactionId = transactionResult.rows[0].id;
+        const orderId = orderResult.rows[0].id;
+        const orderNumber = orderResult.rows[0].order_number;
         
-        // Create transaction items
+        // Create order items
         for (const item of cart.items) {
-            const skuResult = await client.query(
-                'SELECT s.*, p.name, p.tax_rate_decimal FROM skus s JOIN products p ON p.id = s.product_id WHERE s.id = $1',
-                [item.skuId]
+            const productResult = await client.query(
+                'SELECT id, name, sku, price_cents FROM products WHERE id = $1 AND merchant_id = $2',
+                [item.productId || item.skuId, merchantId] // Handle legacy skuId field
             );
             
-            const sku = skuResult.rows[0];
-            const lineTotal = sku.price_cents * item.quantity;
+            if (productResult.rows.length === 0) {
+                throw new Error(`Product not found: ${item.productId || item.skuId}`);
+            }
+            
+            const product = productResult.rows[0];
+            const lineTotal = item.unit_price_cents * item.quantity;
             
             await client.query(`
-                INSERT INTO transaction_items (
-                    transaction_id, sku_id, product_name, variant_info,
+                INSERT INTO order_items (
+                    order_id, product_id, product_name, product_sku,
                     quantity, unit_price_cents, line_total_cents
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7)
             `, [
-                transactionId,
-                item.skuId,
-                sku.name,
-                sku.name_suffix,
+                orderId,
+                product.id,
+                product.name,
+                product.sku,
                 item.quantity,
-                sku.price_cents,
+                item.unit_price_cents,
                 lineTotal
             ]);
         }

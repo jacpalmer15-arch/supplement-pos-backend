@@ -7,6 +7,8 @@ const { authenticateToken, requireMerchant, requireRole } = require('./middlewar
 const productRoutes = require('./routes/products');
 const inventoryRoutes = require('./routes/inventory');
 const checkoutRoutes = require('./routes/checkout');
+const categoriesRoutes = require('./routes/categories');
+const ordersRoutes = require('./routes/orders');
 const webhookRoutes = require('./routes/webhooks');
 const syncRoutes = require('./routes/sync');
 const dns = require('dns').promises;
@@ -40,6 +42,8 @@ app.get('/', (req, res) => {
 app.use('/api/products', authenticateToken, requireMerchant, productRoutes);
 app.use('/api/inventory', authenticateToken, requireMerchant, inventoryRoutes);
 app.use('/api/checkout', authenticateToken, requireMerchant, checkoutRoutes);
+app.use('/api/categories', authenticateToken, requireMerchant, categoriesRoutes);
+app.use('/api/orders', authenticateToken, requireMerchant, ordersRoutes);
 app.use('/api/sync', syncRoutes); // sync routes handle their own auth
 
 // Public routes (no authentication required)
