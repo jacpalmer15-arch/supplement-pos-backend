@@ -11,6 +11,7 @@ const webhookRoutes = require('./routes/webhooks');
 const syncRoutes = require('./routes/sync');
 const dns = require('dns').promises;
 const db = require('./config/database');
+const categoriesRoutes = require('./routes/categories');
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use('/api/products', authenticateToken, requireMerchant, productRoutes);
 app.use('/api/inventory', authenticateToken, requireMerchant, inventoryRoutes);
 app.use('/api/checkout', authenticateToken, requireMerchant, checkoutRoutes);
 app.use('/api/sync', syncRoutes); // sync routes handle their own auth
+app.use('/api/categories', categoriesRoutes);
 
 // Public routes (no authentication required)
 app.use('/api/webhooks', webhookRoutes); // Clover should call /api/webhooks/*
