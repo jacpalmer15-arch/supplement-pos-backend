@@ -90,13 +90,12 @@ router.post('/', async (req, res) => {
             for (const lineItem of cloverOrder.lineItems.elements) {
                 await client.query(`
                     INSERT INTO transaction_items (
-                        transaction_id, clover_line_item_id, clover_item_id, 
+                        transaction_id, clover_item_id, 
                         product_name, variant_info, quantity, unit_price_cents, 
                         discount_cents, line_total_cents, created_at
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
                 `, [
                     transactionId,
-                    lineItem.id,
                     lineItem.item?.id || null,
                     lineItem.name || '',
                     lineItem.alternateName || '',
