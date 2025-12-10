@@ -66,12 +66,14 @@ router.post('/', async (req, res) => {
             }
         }
         
+        const discountCents = 0; // No discounts for now
+        
         // Create transaction record
         const transactionResult = await client.query(`
             INSERT INTO transactions (
                 merchant_id, external_id, clover_order_id, subtotal_cents, 
-                tax_cents, total_cents, status, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+                tax_cents, discount_cents, total_cents, status, order_from_sc
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING id
         `, [
             merchantId,
@@ -79,8 +81,10 @@ router.post('/', async (req, res) => {
             cloverOrder.id,
             subtotalCents,
             taxCents,
+            discountCents,
             totalCents,
-            cloverOrder.state || 'OPEN'
+            cloverOrder.state || 'OPEN',
+            true
         ]);
         
         const transactionId = transactionResult.rows[0].id;
@@ -88,21 +92,40 @@ router.post('/', async (req, res) => {
         // Create transaction items from Clover line items
         if (cloverOrder.lineItems && cloverOrder.lineItems.elements) {
             for (const lineItem of cloverOrder.lineItems.elements) {
+                const cloverItemId = lineItem.item?.id || null;
+                const quantity = 1; // Default quantity to 1 if not specified
+                const unitPriceCents = lineItem.price || 0;
+                const discountCents = 0; // No discount tracking for now
+                const lineTotalCents = (unitPriceCents * quantity) - discountCents;
+                
+                // Try to find the product_id from our products table using clover_item_id
+                let productId = null;
+                if (cloverItemId) {
+                    const productResult = await client.query(
+                        'SELECT id FROM products WHERE clover_item_id = $1',
+                        [cloverItemId]
+                    );
+                    if (productResult.rows.length > 0) {
+                        productId = productResult.rows[0].id;
+                    }
+                }
+                
                 await client.query(`
                     INSERT INTO transaction_items (
-                        transaction_id, clover_item_id, 
+                        transaction_id, product_id, clover_item_id, 
                         product_name, variant_info, quantity, unit_price_cents, 
-                        discount_cents, line_total_cents, created_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+                        discount_cents, line_total_cents
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 `, [
                     transactionId,
-                    lineItem.item?.id || null,
+                    productId,
+                    cloverItemId,
                     lineItem.name || '',
                     lineItem.alternateName || '',
-                    1, // Default quantity to 1 if not specified
-                    lineItem.price || 0,
-                    0, // No discount tracking for now
-                    lineItem.price || 0
+                    quantity,
+                    unitPriceCents,
+                    discountCents,
+                    lineTotalCents
                 ]);
             }
         }
