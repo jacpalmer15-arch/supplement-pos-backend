@@ -14,9 +14,9 @@ router.post('/', async (req, res) => {
     try {
         await client.query('BEGIN');
         
-        const { cart, deviceSerial } = req.body;
+        const { orderCart } = req.body;
         
-        if (!cart || !cart.items || cart.items.length === 0) {
+        if (!orderCart || !orderCart.lineItems || orderCart.lineItems.length === 0) {
             return res.status(400).json({
                 success: false,
                 error: 'Cart is empty'
@@ -40,103 +40,73 @@ router.post('/', async (req, res) => {
         
         const merchantId = merchantResult.rows[0].id;
         
-        // Calculate totals
+        // Create order in Clover using atomic_order endpoint
+        const cloverOrderPayload = { orderCart };
+        
+        const cloverOrder = await cloverService.createOrderAtomic(cloverOrderPayload);
+        
+        // Calculate totals from Clover response
+        const totalCents = cloverOrder.total || 0;
+        
+        // Calculate subtotal and tax from line items
         let subtotalCents = 0;
         let taxCents = 0;
         
-        // Validate inventory and calculate totals
-        for (const item of cart.items) {
-            const skuResult = await client.query(
-                'SELECT s.*, i.on_hand, p.tax_rate_decimal FROM skus s LEFT JOIN inventory i ON i.sku_id = s.id JOIN products p ON p.id = s.product_id WHERE s.id = $1',
-                [item.skuId]
-            );
-            
-            if (skuResult.rows.length === 0) {
-                throw new Error(`SKU not found: ${item.skuId}`);
+        if (cloverOrder.lineItems && cloverOrder.lineItems.elements) {
+            for (const lineItem of cloverOrder.lineItems.elements) {
+                subtotalCents += lineItem.price || 0;
+                
+                // Calculate tax for this line item
+                if (lineItem.taxRates && lineItem.taxRates.elements) {
+                    for (const taxRate of lineItem.taxRates.elements) {
+                        const itemTax = Math.round((lineItem.price * taxRate.rate) / 1000000);
+                        taxCents += itemTax;
+                    }
+                }
             }
-            
-            const sku = skuResult.rows[0];
-            
-            // Check inventory
-            if (sku.on_hand < item.quantity) {
-                throw new Error(`Insufficient inventory for ${sku.sku}. Available: ${sku.on_hand}, Requested: ${item.quantity}`);
-            }
-            
-            const lineTotal = sku.price_cents * item.quantity;
-            const lineTax = Math.round(lineTotal * sku.tax_rate_decimal);
-            
-            subtotalCents += lineTotal;
-            taxCents += lineTax;
         }
-        
-        const totalCents = subtotalCents + taxCents;
         
         // Create transaction record
         const transactionResult = await client.query(`
             INSERT INTO transactions (
-                merchant_id, external_id, subtotal_cents, 
-                tax_cents, total_cents, status
-            ) VALUES ($1, $2, $3, $4, $5, $6)
+                merchant_id, external_id, clover_order_id, subtotal_cents, 
+                tax_cents, total_cents, status, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
             RETURNING id
         `, [
             merchantId,
             externalId,
+            cloverOrder.id,
             subtotalCents,
             taxCents,
             totalCents,
-            'PENDING'
+            cloverOrder.state || 'OPEN'
         ]);
         
         const transactionId = transactionResult.rows[0].id;
         
-        // Create transaction items
-        for (const item of cart.items) {
-            const skuResult = await client.query(
-                'SELECT s.*, p.id as product_id, p.name, p.tax_rate_decimal FROM skus s JOIN products p ON p.id = s.product_id WHERE s.id = $1',
-                [item.skuId]
-            );
-            
-            const sku = skuResult.rows[0];
-            const lineTotal = sku.price_cents * item.quantity;
-            const discountCents = 0; // No discounts for now
-            
-            await client.query(`
-                INSERT INTO transaction_items (
-                    transaction_id, product_id, clover_item_id, product_name, variant_info,
-                    quantity, unit_price_cents, discount_cents, line_total_cents
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            `, [
-                transactionId,
-                sku.product_id,
-                null, // clover_item_id initially NULL, can be populated later from Clover order response if needed
-                sku.name,
-                sku.name_suffix,
-                item.quantity,
-                sku.price_cents,
-                discountCents,
-                lineTotal
-            ]);
-        }
-        
-        // Create order in Clover using atomic_order endpoint
-        const lineItems = cart.items.map(item => ({
-            item: { id: item.cloverVariantId },
-            unitQty: item.quantity
-        }));
-        
-        const cloverOrderPayload = {
-            orderCart: {
-                lineItems: lineItems
+        // Create transaction items from Clover line items
+        if (cloverOrder.lineItems && cloverOrder.lineItems.elements) {
+            for (const lineItem of cloverOrder.lineItems.elements) {
+                await client.query(`
+                    INSERT INTO transaction_items (
+                        transaction_id, clover_line_item_id, clover_item_id, 
+                        product_name, variant_info, quantity, unit_price_cents, 
+                        discount_cents, line_total_cents, created_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+                `, [
+                    transactionId,
+                    lineItem.id,
+                    lineItem.item?.id || null,
+                    lineItem.name || '',
+                    lineItem.alternateName || '',
+                    1, // Default quantity to 1 if not specified
+                    lineItem.price || 0,
+                    0, // No discount tracking for now
+                    lineItem.price || 0
+                ]);
             }
-        };
-        
-        const cloverOrder = await cloverService.createOrderAtomic(cloverOrderPayload);
-        
-        // Update transaction with Clover order ID
-        await client.query(
-            'UPDATE transactions SET clover_order_id = $1 WHERE id = $2',
-            [cloverOrder.id, transactionId]
-        );
+        }
         
         await client.query('COMMIT');
         
@@ -149,7 +119,8 @@ router.post('/', async (req, res) => {
                 subtotalCents,
                 taxCents,
                 totalCents,
-                status: 'PENDING'
+                status: cloverOrder.state || 'OPEN',
+                cloverOrder
             }
         });
         
