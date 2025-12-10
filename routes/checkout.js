@@ -108,7 +108,7 @@ router.post('/', async (req, res) => {
             `, [
                 transactionId,
                 sku.product_id,
-                null, // clover_item_id initially NULL
+                null, // clover_item_id initially NULL, can be populated later from Clover order response if needed
                 sku.name,
                 sku.name_suffix,
                 item.quantity,
