@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../config/database');
-const { authenticateToken, requireMerchant } = require('../middleware/auth');
+const { authenticateToken, requireMerchant } = require('../src/middleware/auth');
 const router = express.Router();
 
 // GET /api/categories - list all categories for the merchant
