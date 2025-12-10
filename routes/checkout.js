@@ -92,56 +92,50 @@ router.post('/', async (req, res) => {
         // Create transaction items
         for (const item of cart.items) {
             const skuResult = await client.query(
-                'SELECT s.*, p.name, p.tax_rate_decimal FROM skus s JOIN products p ON p.id = s.product_id WHERE s.id = $1',
+                'SELECT s.*, p.id as product_id, p.name, p.tax_rate_decimal FROM skus s JOIN products p ON p.id = s.product_id WHERE s.id = $1',
                 [item.skuId]
             );
             
             const sku = skuResult.rows[0];
             const lineTotal = sku.price_cents * item.quantity;
+            const discountCents = 0; // No discounts for now
             
             await client.query(`
                 INSERT INTO transaction_items (
-                    transaction_id, sku_id, product_name, variant_info,
-                    quantity, unit_price_cents, line_total_cents
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    transaction_id, product_id, clover_item_id, product_name, variant_info,
+                    quantity, unit_price_cents, discount_cents, line_total_cents
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             `, [
                 transactionId,
-                item.skuId,
+                sku.product_id,
+                null, // clover_item_id initially NULL, can be populated later from Clover order response if needed
                 sku.name,
                 sku.name_suffix,
                 item.quantity,
                 sku.price_cents,
+                discountCents,
                 lineTotal
             ]);
         }
         
-        // Create order in Clover
-        const cloverOrderData = {
-            items: cart.items.map(item => ({
-                item: { id: item.cloverVariantId },
-                unitQty: item.quantity
-            }))
+        // Create order in Clover using atomic_order endpoint
+        const lineItems = cart.items.map(item => ({
+            item: { id: item.cloverVariantId },
+            unitQty: item.quantity
+        }));
+        
+        const cloverOrderPayload = {
+            orderCart: {
+                lineItems: lineItems
+            }
         };
         
-        const cloverOrder = await cloverService.createOrder(cloverOrderData);
+        const cloverOrder = await cloverService.createOrderAtomic(cloverOrderPayload);
         
         // Update transaction with Clover order ID
         await client.query(
             'UPDATE transactions SET clover_order_id = $1 WHERE id = $2',
             [cloverOrder.id, transactionId]
-        );
-        
-        // Initiate payment on Clover Mini
-        const payment = await cloverService.initiatePayment(
-            cloverOrder.id,
-            totalCents,
-            externalId
-        );
-        
-        // Update transaction with payment ID
-        await client.query(
-            'UPDATE transactions SET clover_payment_id = $1 WHERE id = $2',
-            [payment.id, transactionId]
         );
         
         await client.query('COMMIT');
@@ -152,11 +146,10 @@ router.post('/', async (req, res) => {
                 transactionId,
                 externalId,
                 cloverOrderId: cloverOrder.id,
-                cloverPaymentId: payment.id,
                 subtotalCents,
                 taxCents,
                 totalCents,
-                status: 'PAYMENT_INITIATED'
+                status: 'PENDING'
             }
         });
         

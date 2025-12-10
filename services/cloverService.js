@@ -62,8 +62,63 @@ async function fetchPaged(path, { params = {}, limit = 100 } = {}, onBatch, http
   }
 }
 
+/**
+ * Create an order using Clover's atomic_order endpoint.
+ * @param {Object} orderPayload - Order data with orderCart containing lineItems
+ * @returns {Promise<Object>} Created order data
+ * @throws {Error} On 4xx/5xx responses
+ */
+async function createOrderAtomic(orderPayload) {
+  if (!CLOVER_MERCHANT_ID) {
+    throw new Error('Missing CLOVER_MERCHANT_ID');
+  }
+  
+  const http = clover();
+  const res = await http.post(
+    `/v3/merchants/${CLOVER_MERCHANT_ID}/atomic_order/orders`,
+    orderPayload
+  );
+  
+  if (res.status >= 400) {
+    throw new Error(`${res.status} atomic_order failed: ${JSON.stringify(res.data)}`);
+  }
+  
+  return res.data;
+}
+
+/**
+ * Initiate a payment for an order (not used by checkout flow, kept for reference).
+ * @param {string} orderId - Clover order ID
+ * @param {number} amount - Amount in cents
+ * @param {string} externalPaymentId - External payment reference ID
+ * @returns {Promise<Object>} Payment initiation response
+ * @throws {Error} On 4xx/5xx responses
+ */
+async function initiatePayment(orderId, amount, externalPaymentId) {
+  if (!CLOVER_MERCHANT_ID) {
+    throw new Error('Missing CLOVER_MERCHANT_ID');
+  }
+  
+  const http = clover();
+  const res = await http.post(
+    `/v3/merchants/${CLOVER_MERCHANT_ID}/orders/${orderId}/payments`,
+    {
+      amount,
+      externalPaymentId,
+    }
+  );
+  
+  if (res.status >= 400) {
+    throw new Error(`${res.status} payment initiation failed: ${JSON.stringify(res.data)}`);
+  }
+  
+  return res.data;
+}
+
 module.exports = {
   clover,
   fetchPaged,
+  createOrderAtomic,
+  initiatePayment,
   CLOVER_MERCHANT_ID,
 };
