@@ -76,10 +76,13 @@ class OrderService {
             const cloverEmployeeId = order.employee?.id || null;
             
             // Calculate subtotal from line items
+            // Use line item total if available, otherwise price (which should already be the line total)
             let subtotalCents = 0;
             if (order.lineItems && order.lineItems.elements) {
               for (const li of order.lineItems.elements) {
-                subtotalCents += li.price || 0;
+                // Clover's lineItem.price is already the total for that line (price * quantity)
+                // But we should use lineItem.total if available for accuracy
+                subtotalCents += (li.total || li.price || 0);
               }
             }
             
