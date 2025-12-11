@@ -259,14 +259,15 @@ describe('Orders Sync API', () => {
         });
 
         // Verify unmatched transaction was marked
+        const verifyClient = await db.connect();
         try {
-          const result = await client.query(
+          const result = await verifyClient.query(
             'SELECT status FROM transactions WHERE merchant_id = $1 AND clover_order_id = $2',
             [testMerchantId, 'ORDER_TO_DELETE']
           );
           expect(result.rows[0].status).toBe('delete');
         } finally {
-          client.release();
+          verifyClient.release();
         }
       });
 
@@ -312,8 +313,9 @@ describe('Orders Sync API', () => {
         });
 
         // Verify transaction was NOT marked for deletion
+        const verifyClient = await db.connect();
         try {
-          const result = await client.query(
+          const result = await verifyClient.query(
             'SELECT status FROM transactions WHERE merchant_id = $1 AND clover_order_id = $2',
             [testMerchantId, 'ORDER_NO_DELETE']
           );
@@ -321,7 +323,7 @@ describe('Orders Sync API', () => {
             expect(result.rows[0].status).not.toBe('delete');
           }
         } finally {
-          client.release();
+          verifyClient.release();
         }
       });
 

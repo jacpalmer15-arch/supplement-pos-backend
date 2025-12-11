@@ -184,26 +184,27 @@ class OrderService {
       if (prune && cloverOrderIds.size > 0) {
         const cloverOrderIdArray = Array.from(cloverOrderIds);
         
-        // Find local transactions not in Clover
+        // Find local transactions not in Clover using ANY for safe parameterized query
         const unmatchedResult = await client.query(`
           SELECT id, clover_order_id
           FROM transactions
           WHERE merchant_id = $1
             AND clover_order_id IS NOT NULL
-            AND clover_order_id NOT IN (${cloverOrderIdArray.map((_, i) => `$${i + 2}`).join(', ')})
+            AND clover_order_id != ALL($2::text[])
             AND status != 'delete'
-        `, [merchantId, ...cloverOrderIdArray]);
+        `, [merchantId, cloverOrderIdArray]);
 
         unmatched = unmatchedResult.rows.map(r => r.clover_order_id);
         
         if (unmatchedResult.rows.length > 0) {
           const unmatchedIds = unmatchedResult.rows.map(r => r.id);
           
+          // Use ANY for safe parameterized update
           await client.query(`
             UPDATE transactions
             SET status = 'delete'
-            WHERE id IN (${unmatchedIds.map((_, i) => `$${i + 1}`).join(', ')})
-          `, unmatchedIds);
+            WHERE id = ANY($1::uuid[])
+          `, [unmatchedIds]);
           
           markedForDelete = unmatchedResult.rows.length;
         }
@@ -216,9 +217,9 @@ class OrderService {
             FROM transactions
             WHERE merchant_id = $1
               AND clover_order_id IS NOT NULL
-              AND clover_order_id NOT IN (${cloverOrderIdArray.map((_, i) => `$${i + 2}`).join(', ')})
+              AND clover_order_id != ALL($2::text[])
               AND status != 'delete'
-          `, [merchantId, ...cloverOrderIdArray]);
+          `, [merchantId, cloverOrderIdArray]);
           
           unmatched = unmatchedResult.rows.map(r => r.clover_order_id);
         }
