@@ -57,15 +57,17 @@ class OrderService {
       const filters = [];
       if (modifiedSince) {
         filters.push(`modifiedTime>=${modifiedSince}`);
+      } else {
+        // Default: get all orders from beginning of time to override Clover's 90-day default
+        filters.push(`modifiedTime>=946684800000`);
       }
+      
       if (modifiedUntil) {
         filters.push(`modifiedTime<=${modifiedUntil}`);
       }
       
-      if (filters.length > 0) {
-        params.filter = filters.join(' AND ');
-        params.orderBy = 'modifiedTime ASC';
-      }
+      params.filter = filters.join(' AND ');
+      params.orderBy = 'modifiedTime ASC';
       
       await fetchPaged(path, { limit, params }, async (orders) => {
         console.log(`Processing batch of ${orders.length} orders. Total processed so far: ${processed}`);
