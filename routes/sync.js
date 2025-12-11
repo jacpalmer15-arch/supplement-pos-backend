@@ -1,5 +1,6 @@
 // routes/sync.js
 const express = require('express');
+const axios = require('axios');
 const syncService = require('../services/syncService');
 const orderService = require('../services/orderService');
 const db = require('../config/database');
@@ -137,19 +138,78 @@ router.get('/status', async (req, res) => {
  *   - limit (int): page size for fetchPaged (default 100)
  *   - prune (boolean): mark local transactions not in Clover with status='delete' (default false)
  * 
+ * Behavior controlled by VERCEL_BASE_URL environment variable:
+ * - If VERCEL_BASE_URL is set: proxies request to ${VERCEL_BASE_URL}/api/products/sync
+ * - If VERCEL_BASE_URL is not set: performs local Clover order sync
+ * 
  * Note: Rate limiting should be added in production (similar to /api/sync/full)
  */
 router.post('/orders', async (req, res) => {
-  try {
-    const merchantId = req.merchant.id;
-    
-    if (!merchantId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Merchant ID not found in request context'
-      });
-    }
+  const merchantId = req.merchant.id;
+  
+  if (!merchantId) {
+    return res.status(400).json({
+      success: false,
+      error: 'Merchant ID not found in request context'
+    });
+  }
 
+  // Check if we should proxy to Vercel
+  const vercelBaseUrl = process.env.VERCEL_BASE_URL;
+  
+  if (vercelBaseUrl && vercelBaseUrl.trim()) {
+    // Proxy mode: forward request to Vercel-hosted products sync endpoint
+    try {
+      // Build target URL with query string
+      const baseUrl = vercelBaseUrl.replace(/\/$/, '');
+      const targetUrl = `${baseUrl}/api/products/sync`;
+      const queryString = new URLSearchParams(req.query).toString();
+      const fullUrl = queryString ? `${targetUrl}?${queryString}` : targetUrl;
+      
+      console.log(`Proxying orders sync to Vercel for merchant ${merchantId}: ${fullUrl}`);
+      
+      // Prepare headers to forward
+      const headers = {};
+      if (req.headers.authorization) {
+        headers['Authorization'] = req.headers.authorization;
+      }
+      if (req.headers['content-type']) {
+        headers['Content-Type'] = req.headers['content-type'];
+      }
+      if (req.headers['accept']) {
+        headers['Accept'] = req.headers['accept'];
+      }
+      
+      // Make proxied request
+      const response = await axios.post(fullUrl, req.body, {
+        headers,
+        timeout: 120000, // 120 second timeout
+        validateStatus: () => true // Accept any status code so we can forward it
+      });
+      
+      // Forward upstream response
+      return res.status(response.status).json(response.data);
+      
+    } catch (error) {
+      console.error('Proxy error for orders sync:', error.message);
+      
+      // Handle network errors (no response from upstream)
+      if (!error.response) {
+        return res.status(502).json({
+          success: false,
+          error: 'Bad Gateway: Unable to reach upstream sync endpoint',
+          details: error.message,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Forward error response from upstream
+      return res.status(error.response.status).json(error.response.data);
+    }
+  }
+  
+  // Local mode: perform local Clover order sync (original behavior)
+  try {
     // Parse query parameters
     const limit = parseInt(req.query.limit) || 100;
     const prune = req.query.prune === 'true' || req.query.prune === true;
@@ -220,12 +280,12 @@ router.post('/orders', async (req, res) => {
     } else if (error.message.includes('expired')) {
       statusCode = 401;
       errorMessage = 'Clover access token has expired. Please re-authenticate with Clover.';
-    } else if (error.message.includes('Merchant not found')) {
-      statusCode = 404;
-      errorMessage = 'Merchant account not found';
     } else if (error.message.includes('No Clover merchant ID')) {
       statusCode = 400;
       errorMessage = 'No Clover merchant ID associated with this account';
+    } else if (error.message.includes('Merchant not found')) {
+      statusCode = 404;
+      errorMessage = 'Merchant account not found';
     }
 
     res.status(statusCode).json({
