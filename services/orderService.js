@@ -15,9 +15,10 @@ class OrderService {
    * @param {Object} options - Sync options
    * @param {number} options.limit - Page size for fetchPaged (default 100)
    * @param {boolean} options.prune - Whether to mark unmatched local transactions (default false)
+   * @param {number} options.modifiedSince - Only sync orders modified since this timestamp (milliseconds)
    * @returns {Object} - Sync results with counts
    */
-  async syncOrders(merchantId, accessToken, cloverMerchantId, { limit = 100, prune = false } = {}) {
+  async syncOrders(merchantId, accessToken, cloverMerchantId, { limit = 100, prune = false, modifiedSince = null } = {}) {
     const startTime = new Date();
     const axios = require('axios');
     
@@ -47,7 +48,15 @@ class OrderService {
     
     try {
       const path = `/v3/merchants/${cloverMerchantId}/orders`;
-      const params = { expand: 'lineItems' };
+      const params = { 
+        expand: 'lineItems',
+        orderBy: 'createdTime ASC' // Ensure consistent ordering for pagination
+      };
+      
+      // Add filter for modified since if provided
+      if (modifiedSince) {
+        params.filter = `modifiedTime>=${modifiedSince}`;
+      }
       
       await fetchPaged(path, { limit, params }, async (orders) => {
         for (const order of orders) {
