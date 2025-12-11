@@ -53,9 +53,14 @@ class OrderService {
         orderBy: 'createdTime ASC' // Ensure consistent ordering for pagination
       };
       
-      // Add filter for modified since if provided
+      // Add filter for date range
       if (modifiedSince) {
+        // If modifiedSince provided, only sync orders modified after that date
         params.filter = `modifiedTime>=${modifiedSince}`;
+      } else {
+        // Otherwise, get all orders by setting a very old start date (Jan 1, 2000)
+        // This overrides Clover's default 90-day filter
+        params.filter = 'createdTime>=946684800000';
       }
       
       await fetchPaged(path, { limit, params }, async (orders) => {
