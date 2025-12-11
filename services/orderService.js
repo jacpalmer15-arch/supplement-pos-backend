@@ -73,20 +73,19 @@ class OrderService {
             const discountCents = 0; // Not tracking discounts for now
             const totalCents = order.total || 0;
             const status = order.state; // Use exact Clover state value
-            const createdAt = order.createdTime ? new Date(order.createdTime) : new Date();
-            const updatedAt = order.modifiedTime ? new Date(order.modifiedTime) : null;
             const orderFromSc = false; // These are Clover-origin orders
             
             // Set completed_at if payment state indicates paid
             const completedAt = order.paymentState === 'PAID' ? new Date() : null;
 
             // Upsert transaction
+            // Following checkout.js pattern but adding completed_at which we know exists from webhooks.js
             const transactionResult = await client.query(`
               INSERT INTO transactions (
                 merchant_id, clover_order_id, external_id, 
                 subtotal_cents, tax_cents, discount_cents, total_cents,
-                status, created_at, updated_at, order_from_sc, completed_at
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                status, order_from_sc, completed_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
               ON CONFLICT (merchant_id, clover_order_id)
               DO UPDATE SET
                 external_id = EXCLUDED.external_id,
@@ -95,7 +94,6 @@ class OrderService {
                 discount_cents = EXCLUDED.discount_cents,
                 total_cents = EXCLUDED.total_cents,
                 status = EXCLUDED.status,
-                updated_at = EXCLUDED.updated_at,
                 completed_at = COALESCE(EXCLUDED.completed_at, transactions.completed_at)
               RETURNING id, (xmax = 0) AS inserted
             `, [
@@ -107,8 +105,6 @@ class OrderService {
               discountCents,
               totalCents,
               status,
-              createdAt,
-              updatedAt,
               orderFromSc,
               completedAt
             ]);
