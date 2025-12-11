@@ -16,9 +16,10 @@ class OrderService {
    * @param {number} options.limit - Page size for fetchPaged (default 100)
    * @param {boolean} options.prune - Whether to mark unmatched local transactions (default false)
    * @param {number} options.modifiedSince - Only sync orders modified since this timestamp (milliseconds)
+   * @param {number} options.modifiedUntil - Only sync orders modified before this timestamp (milliseconds)
    * @returns {Object} - Sync results with counts
    */
-  async syncOrders(merchantId, accessToken, cloverMerchantId, { limit = 100, prune = false, modifiedSince = null } = {}) {
+  async syncOrders(merchantId, accessToken, cloverMerchantId, { limit = 100, prune = false, modifiedSince = null, modifiedUntil = null } = {}) {
     const startTime = new Date();
     const axios = require('axios');
     
@@ -52,15 +53,18 @@ class OrderService {
         expand: 'lineItems'
       };
       
-      // Add filter for date range
+      // Build date range filter
+      const filters = [];
       if (modifiedSince) {
-        // If modifiedSince provided, only sync orders modified after that date
-        params.filter = `modifiedTime>=${modifiedSince}`;
+        filters.push(`modifiedTime>=${modifiedSince}`);
+      }
+      if (modifiedUntil) {
+        filters.push(`modifiedTime<=${modifiedUntil}`);
+      }
+      
+      if (filters.length > 0) {
+        params.filter = filters.join(' AND ');
         params.orderBy = 'modifiedTime ASC';
-      } else {
-        // Get all orders - try without orderBy to avoid potential API limitations
-        // Some Clover endpoints have issues with orderBy + large date ranges
-        // The 90-day default might be enforced when using orderBy
       }
       
       await fetchPaged(path, { limit, params }, async (orders) => {

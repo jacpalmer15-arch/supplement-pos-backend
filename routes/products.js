@@ -61,8 +61,9 @@ router.post('/sync-orders', async (req, res) => {
     const limit = parseInt(req.query.limit) || 100;
     const prune = req.query.prune === 'true' || req.query.prune === true;
     const modifiedSince = req.query.modifiedSince ? parseInt(req.query.modifiedSince) : null;
+    const modifiedUntil = req.query.modifiedUntil ? parseInt(req.query.modifiedUntil) : null;
 
-    console.log(`Orders sync requested for merchant ${merchantId} (limit=${limit}, prune=${prune}, modifiedSince=${modifiedSince})`);
+    console.log(`Orders sync requested for merchant ${merchantId} (limit=${limit}, prune=${prune}, modifiedSince=${modifiedSince}, modifiedUntil=${modifiedUntil})`);
 
     // Get Clover credentials from environment variables
     const cloverAccessToken = process.env.CLOVER_ACCESS_TOKEN;
@@ -77,7 +78,7 @@ router.post('/sync-orders', async (req, res) => {
       merchantId,
       cloverAccessToken,
       cloverMerchantId,
-      { limit, prune, modifiedSince }
+      { limit, prune, modifiedSince, modifiedUntil }
     );
 
     // Return result

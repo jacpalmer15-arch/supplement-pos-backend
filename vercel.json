@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/products/sync-orders.js": {
+      "maxDuration": 300
+    }
+  }
+}
