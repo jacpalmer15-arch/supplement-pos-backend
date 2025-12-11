@@ -58,8 +58,11 @@ class OrderService {
             cloverOrderIds.add(cloverOrderId);
             processed++;
 
-            // Map order fields
-            const externalId = order.externalId || null;
+            // Map order fields - use clover order ID as external_id if not provided
+            const externalId = order.externalId || cloverOrderId;
+            
+            // Capture employee ID from order (for future use/tracking)
+            const cloverEmployeeId = order.employee?.id || null;
             
             // Calculate subtotal from line items
             let subtotalCents = 0;
@@ -77,6 +80,9 @@ class OrderService {
             
             // Set completed_at if payment state indicates paid
             const completedAt = order.paymentState === 'PAID' ? new Date() : null;
+            
+            // Note: cloverEmployeeId is captured but not stored yet
+            // TODO: Add employee_clover_id column to transactions table to track this
 
             // Check if transaction exists
             const existingResult = await client.query(
