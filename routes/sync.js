@@ -136,6 +136,8 @@ router.get('/status', async (req, res) => {
  * Query params:
  *   - limit (int): page size for fetchPaged (default 100)
  *   - prune (boolean): mark local transactions not in Clover with status='delete' (default false)
+ * 
+ * Note: Rate limiting should be added in production (similar to /api/sync/full)
  */
 router.post('/orders', async (req, res) => {
   try {
