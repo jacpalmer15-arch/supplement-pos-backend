@@ -49,18 +49,18 @@ class OrderService {
     try {
       const path = `/v3/merchants/${cloverMerchantId}/orders`;
       const params = { 
-        expand: 'lineItems',
-        orderBy: 'createdTime ASC' // Ensure consistent ordering for pagination
+        expand: 'lineItems'
       };
       
       // Add filter for date range
       if (modifiedSince) {
         // If modifiedSince provided, only sync orders modified after that date
         params.filter = `modifiedTime>=${modifiedSince}`;
+        params.orderBy = 'modifiedTime ASC';
       } else {
-        // Otherwise, get all orders by setting a very old start date (Jan 1, 2000)
-        // This overrides Clover's default 90-day filter
-        params.filter = 'createdTime>=946684800000';
+        // Get all orders - try without orderBy to avoid potential API limitations
+        // Some Clover endpoints have issues with orderBy + large date ranges
+        // The 90-day default might be enforced when using orderBy
       }
       
       await fetchPaged(path, { limit, params }, async (orders) => {
