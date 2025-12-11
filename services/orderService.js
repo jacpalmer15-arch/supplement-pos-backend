@@ -78,39 +78,65 @@ class OrderService {
             // Set completed_at if payment state indicates paid
             const completedAt = order.paymentState === 'PAID' ? new Date() : null;
 
-            // Upsert transaction
-            // Following checkout.js pattern but adding completed_at which we know exists from webhooks.js
-            const transactionResult = await client.query(`
-              INSERT INTO transactions (
-                merchant_id, clover_order_id, external_id, 
-                subtotal_cents, tax_cents, discount_cents, total_cents,
-                status, order_from_sc, completed_at
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-              ON CONFLICT (merchant_id, clover_order_id)
-              DO UPDATE SET
-                external_id = EXCLUDED.external_id,
-                subtotal_cents = EXCLUDED.subtotal_cents,
-                tax_cents = EXCLUDED.tax_cents,
-                discount_cents = EXCLUDED.discount_cents,
-                total_cents = EXCLUDED.total_cents,
-                status = EXCLUDED.status,
-                completed_at = COALESCE(EXCLUDED.completed_at, transactions.completed_at)
-              RETURNING id, (xmax = 0) AS inserted
-            `, [
-              merchantId,
-              cloverOrderId,
-              externalId,
-              subtotalCents,
-              taxCents,
-              discountCents,
-              totalCents,
-              status,
-              orderFromSc,
-              completedAt
-            ]);
+            // Check if transaction exists
+            const existingResult = await client.query(
+              'SELECT id FROM transactions WHERE merchant_id = $1 AND clover_order_id = $2',
+              [merchantId, cloverOrderId]
+            );
 
-            const transactionId = transactionResult.rows[0].id;
-            const wasInserted = transactionResult.rows[0].inserted;
+            let transactionId;
+            let wasInserted;
+
+            if (existingResult.rows.length > 0) {
+              // Update existing transaction
+              transactionId = existingResult.rows[0].id;
+              wasInserted = false;
+              
+              await client.query(`
+                UPDATE transactions SET
+                  external_id = $1,
+                  subtotal_cents = $2,
+                  tax_cents = $3,
+                  discount_cents = $4,
+                  total_cents = $5,
+                  status = $6,
+                  completed_at = COALESCE($7, completed_at)
+                WHERE id = $8
+              `, [
+                externalId,
+                subtotalCents,
+                taxCents,
+                discountCents,
+                totalCents,
+                status,
+                completedAt,
+                transactionId
+              ]);
+            } else {
+              // Insert new transaction
+              const insertResult = await client.query(`
+                INSERT INTO transactions (
+                  merchant_id, clover_order_id, external_id, 
+                  subtotal_cents, tax_cents, discount_cents, total_cents,
+                  status, order_from_sc, completed_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                RETURNING id
+              `, [
+                merchantId,
+                cloverOrderId,
+                externalId,
+                subtotalCents,
+                taxCents,
+                discountCents,
+                totalCents,
+                status,
+                orderFromSc,
+                completedAt
+              ]);
+              
+              transactionId = insertResult.rows[0].id;
+              wasInserted = true;
+            }
             
             if (wasInserted) {
               inserted++;
