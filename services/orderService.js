@@ -59,6 +59,8 @@ class OrderService {
       }
       
       await fetchPaged(path, { limit, params }, async (orders) => {
+        console.log(`Processing batch of ${orders.length} orders. Total processed so far: ${processed}`);
+        
         for (const order of orders) {
           try {
             await client.query('BEGIN');
@@ -84,10 +86,19 @@ class OrderService {
             // Use Clover's total as source of truth
             const totalCents = order.total || 0;
             
-            // Calculate tax as the difference to satisfy CHECK constraint: total = subtotal + tax - discount
-            // Since we don't track discounts separately, tax absorbs all differences
-            const discountCents = 0;
-            const taxCents = totalCents - subtotalCents - discountCents;
+            // Calculate tax/discount to satisfy CHECK constraint: total = subtotal + tax - discount
+            // If total < subtotal, it's a discount. Otherwise, difference is tax.
+            let taxCents = 0;
+            let discountCents = 0;
+            
+            const difference = totalCents - subtotalCents;
+            if (difference >= 0) {
+              // Total is higher than subtotal - difference is tax
+              taxCents = difference;
+            } else {
+              // Total is lower than subtotal - difference is discount
+              discountCents = Math.abs(difference);
+            }
             const status = order.state; // Use exact Clover state value
             const orderFromSc = false; // These are Clover-origin orders
             
