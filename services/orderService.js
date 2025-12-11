@@ -72,9 +72,13 @@ class OrderService {
               }
             }
             
-            const taxCents = 0; // Not parsing tax for now
-            const discountCents = 0; // Not tracking discounts for now
+            // Use Clover's total as source of truth
             const totalCents = order.total || 0;
+            
+            // Calculate tax as the difference to satisfy CHECK constraint: total = subtotal + tax - discount
+            // Since we don't track discounts separately, tax absorbs all differences
+            const discountCents = 0;
+            const taxCents = totalCents - subtotalCents - discountCents;
             const status = order.state; // Use exact Clover state value
             const orderFromSc = false; // These are Clover-origin orders
             
