@@ -213,11 +213,11 @@ class OrderService {
         }
       }, cloverClient);
 
-      // Handle prune: mark unmatched local transactions
+      // Mark unmatched local transactions for delete
       let markedForDelete = 0;
       let unmatched = [];
       
-      if (prune && cloverOrderIds.size > 0) {
+      if (cloverOrderIds.size > 0) {
         const cloverOrderIdArray = Array.from(cloverOrderIds);
         
         // Find local transactions not in Clover using ANY for safe parameterized query
@@ -243,21 +243,6 @@ class OrderService {
           `, [unmatchedIds]);
           
           markedForDelete = unmatchedResult.rows.length;
-        }
-      } else if (!prune) {
-        // When prune is false, still query for unmatched count but don't modify
-        if (cloverOrderIds.size > 0) {
-          const cloverOrderIdArray = Array.from(cloverOrderIds);
-          const unmatchedResult = await client.query(`
-            SELECT clover_order_id
-            FROM transactions
-            WHERE merchant_id = $1
-              AND clover_order_id IS NOT NULL
-              AND clover_order_id != ALL($2::text[])
-              AND status != 'delete'
-          `, [merchantId, cloverOrderIdArray]);
-          
-          unmatched = unmatchedResult.rows.map(r => r.clover_order_id);
         }
       }
 
